@@ -21,6 +21,7 @@
 // Analog
 #define tempoPot 0
 #define volumePot 4 
+//#define swingPot
 #define beatPotA 1
 #define beatPotB 2
 #define beatPotC 3
@@ -29,6 +30,10 @@
 #define stepPotB 6
 #define stepPotC 5
 //#define stepPotD
+//#define pitchPotA
+//#define pitchPotB
+//#define pitchPotC
+//#define pitchPotD
 
 // Digital
 #define onSwitch 2
@@ -142,7 +147,6 @@ void updateControl() {
 
   //int volumeVal = mozziAnalogRead(volumePot);
   //volume =  map(volumeVal, 0, 1023, 0, 255);
-  //int tempoVal = mozziAnalogRead(tempoPot);
   //tempo =  map(tempoVal, 0, 1023, 0, 255);
 
   if (swingStep % 2 == 0) {
@@ -211,51 +215,27 @@ void updateControl() {
   //byte beatD = (byte) map(mozziAnalogRead(beatPotD), 0, 1023, 0, stepD);
 
   const int arrSize = 3;
-  char pointers[arrSize] = { pointerA, pointerB, pointerC };
-  char steps[arrSize] = { stepA, stepB, stepC };
-  char beats[arrSize] = {beatA, beatB, beatC };
-  int leds[arrSize] = {  ledA, ledB, ledC };
-  //Sample<NUM_CELLS, AUDIO_RATE>[] *samples = { *soundA, *soundB, *soundC };
+  char pointers[arrSize] = { pointerA, pointerB, pointerC, };
+  char steps[arrSize] = { stepA, stepB, stepC, };
+  char beats[arrSize] = { beatA, beatB, beatC, };
+  int leds[arrSize] = { ledA, ledB, ledC, };
+  //int pitches[arrSize] = { pitchValA, pitchValB, pitchValC, pitchValD };
+  Sample <NUM_CELLS, AUDIO_RATE> *sounds[arrSize] = { soundA, soundB, soundC, };
 
   if(kTriggerDelay.ready()) {
     for (int i = 0; i < arrSize; i++) {
-      if (pointers[i] >= steps[i]) pointers[i] = 0;
-    }
+      if (pointers[i] >= steps[i])  {
+        pointers[i] = 0;
+      }
 
-    if(startPlayback(stepA, beatA, pointerA)) {
-      (*soundA).start();
-      //(*soundA).setFreq(setPitch(pitchValA));
-      digitalWrite(ledA, HIGH);
-      digitalWrite(ledB, LOW);
-      digitalWrite(ledC, LOW);
-      digitalWrite(ledA, LOW);
+      if (startPlayback(steps[i], beats[i], pointers[i])) {
+        (*sounds[i]).start();
+        //(*sounds[i]).setFreq(setPitch(pitches[i]));
+        digitalWrite(leds[i], HIGH);
+        digitalWrite(!(leds[i]), LOW);
+        digitalWrite(leds[i], LOW);
+      }
     }
-    if(startPlayback(stepB, beatB, pointerB)) {
-      (*soundB).start();
-      //(*soundB).setFreq(setPitch(pitchValB));
-      digitalWrite(ledB, HIGH);
-      digitalWrite(ledA, LOW);
-      digitalWrite(ledC, LOW);
-      digitalWrite(ledB, LOW);
-    }
-    if(startPlayback(stepC, beatC, pointerC)) {
-      (*soundC).start();
-      //(*soundC).setFreq(setPitch(pitchValC));
-      digitalWrite(ledC, HIGH);
-      digitalWrite(ledA, LOW);
-      digitalWrite(ledB, LOW);
-      digitalWrite(ledC, LOW);
-    }
-    /*
-    if(startPlayback(stepD, beatD, pointerD)) {
-      (*soundD).start();
-      //(*soundD).setFreq(setPitch(pitchValD));
-      digitalWrite(ledD, HIGH);
-      digitalWrite(ledA, LOW);
-      digitalWrite(ledB, LOW);
-      digitalWrite(ledC, LOW);
-      digitalWrite(ledD, LOW);
-    }*/
 
     pointerA++;
     pointerB++;
