@@ -7,14 +7,14 @@
 # then creates wavetable header files from them with a samplerate of 16384.
 
 import glob
-import os, shutil
+import os, shutil, subprocess
 from array import array
 import wave
 from tkinter import filedialog
 from tkinter import *
 from pydub import AudioSegment
 
-sample_count = 2048
+sample_count = 2048 * 2
 samplerate = 16384
 
 try:    
@@ -65,17 +65,18 @@ def format(file):
         write.writeframes(data)
 
     file = file.split(".")[0]
-    ffmpeg = ffmpeg_exe + " -y -i " + file + ".wav -f s8 -acodec pcm_s8 " + file + ".raw"
+    ##ffmpeg = ffmpeg_exe + " -y -i " + file + ".wav" +  " -f s8 -acodec pcm_s8 "  + file + ".raw" 
+    ffmpeg = f'{ffmpeg_exe} -y -i "{file}.wav" -f s8 -acodec pcm_s8 "{file}.raw"'
     os.system(ffmpeg)
     raw_to_h(f"{file}.raw", file)
 
 if __name__ == "__main__": 
     root = Tk()
     root.withdraw()
+
     path = filedialog.askdirectory(title="Select Folder With .wav Samples")
-    for file in glob.glob(path + "/" + "*.wav"): # Searches folder for all .wav files
-        file = file.replace(" ", "")
+    for file in glob.glob(f"{path}/*.wav"): # Searches folder for all .wav files
         sound = AudioSegment.from_wav(file)
         sound = sound.set_channels(1) # Downsamples file to mono
         sound.export(file, format="wav")
-        format(file)  
+        format(file) 
