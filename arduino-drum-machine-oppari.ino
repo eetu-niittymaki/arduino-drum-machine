@@ -1,9 +1,7 @@
-#include <Wire.h>
 #include <MozziGuts.h>
 #include <Sample.h>
 #include <EventDelay.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <SoftwareSerial.h>
 
 #include "sfx/bongo.h" 
 #include "sfx/conga.h" 
@@ -18,38 +16,41 @@
 #include "sfx/cowbell.h" 
 #include "sfx/tambourine.h" 
 
-#define NUM_CELLS 4096 // Make sure this is the same as in .h wavetable files
+#define NUM_CELLS 2048 // Make sure this is the same as in .h wavetable files
 #define SAMPLERATE 16384
 #define CONTROL_RATE 256
 
-#define MAX_TAP_TIMES 8
 #define MAX_STEPS 16
 
 // Analog
-#define tempoPot 0
+#define tempoPot 9
 #define volumePot 10
 #define swingPot 11
+
 #define beatPotA 1
 #define beatPotB 2
 #define beatPotC 3
 #define beatPotD 4
-#define stepPotA 7
+
+#define stepPotA 5
 #define stepPotB 6
-#define stepPotC 5
-#define stepPotD 4
+#define stepPotC 7
+#define stepPotD 8
+
 #define pitchPotA 12
 #define pitchPotB 13
 #define pitchPotC 14 
 #define pitchPotD 15
-// use for 8?
+// use for pin 0?
 
 // Digital
 #define onSwitch 2
-#define ledA 10
-#define ledB 11
-#define ledC 12
-#define ledD 13
-//#define tapSwitch
+#define ledA 28
+#define ledB 12
+#define ledC 9
+#define ledD 10
+
+SoftwareSerial Link(33, 35); // Rx, Tx
 
 //A
 Sample <NUM_CELLS, AUDIO_RATE>aBongo(bongo_DATA);
@@ -88,28 +89,31 @@ byte pointerC = 0;
 byte pointerD = 0;
 
 byte volume;
-byte bpm;
 float swing;
 const float recorded_pitch =  (float)SAMPLERATE / (float)NUM_CELLS;
 
 int tempo = 120;
 int swingStep = 1;
 
-float tapCountMa[MAX_TAP_TIMES];
-byte nextTapIndex = 0;
+byte printTempo;
+int sampleIdA;
+int sampleIdB;
+int sampleIdC;
+int sampleIdD;
 
 void setup() {
+  Link.begin(115200);
   Serial.begin(115200);
   pinMode(onSwitch, INPUT);
   //pinMode(tapSwitch, INPUT);
-  pinMode(3, INPUT_PULLUP);
+  pinMode(3, INPUT_PULLUP); // A
   pinMode(4, INPUT_PULLUP);
-  pinMode(5, INPUT_PULLUP);
+  pinMode(5, INPUT_PULLUP); // B
   pinMode(6, INPUT_PULLUP);
-  pinMode(7, INPUT_PULLUP);
+  pinMode(7, INPUT_PULLUP); // C
   pinMode(8, INPUT_PULLUP);
-  pinMode(9, INPUT_PULLUP);
-  pinMode(10, INPUT_PULLUP);
+  pinMode(40, INPUT_PULLUP); // D
+  pinMode(42, INPUT_PULLUP);
   pinMode(11, OUTPUT); //9 for Nano, 11 for Mega
   pinMode(ledA, OUTPUT);
   pinMode(ledB, OUTPUT);
@@ -134,33 +138,36 @@ void setup() {
   aTambourine.setFreq((float) tambourine_SAMPLERATE / (float) NUM_CELLS); 
   aCowbell.setFreq((float) cowbell_SAMPLERATE / (float) NUM_CELLS); 
 
-
-  //kTriggerDelay.set(10);
+  kTriggerDelay.set(10);
 }
 
-bool startPlayback(byte stepCount, byte beatCount, byte i) {
+bool startPlayback(byte stepCount, byte beatCount, byte pointer) {
   float divider = ((float)beatCount / (float)stepCount);
   bool start;
-  byte count = i * divider;
-  byte prevCount = (i - 1) * divider;
+  byte count = pointer * divider;
+  byte prevCount = (pointer - 1) * divider;
 
-  return { (i == 0) ? start = (beatCount != 0) : start = (count > prevCount) };
+  return { (pointer == 0) ? start = (beatCount != 0) : start = (count > prevCount) };
 }
 
 float setPitch(int oldPitch) {
   return { (recorded_pitch * (float) oldPitch / 512.f) + 0.1f };
 }
 
-void tapTempo() {
-  /*
-  byte buttonsPressed = 0;
-  byte buttonGroup = 0;
-  byte lastButtonsPressed = 0;
-  byte menuState = 0;
-
-  if (tapSWITCH)
-
-  */
+void sendData() {
+  Link.print('<'); // start marker
+  Link.print(buttonState);
+  Link.print(','); // comma separator
+  Link.print(printTempo);
+  Link.print(',');
+  Link.print(sampleIdA);
+  Link.print(',');
+  Link.print(sampleIdB);
+  Link.print(',');
+  Link.print(sampleIdC);
+  Link.print(',');
+  Link.print(sampleIdD);
+  Link.println('>');
 }
 
 void updateControl() {
@@ -168,16 +175,21 @@ void updateControl() {
 
   if (swingStep > MAX_STEPS) swingStep = 1;
 
-  ////////////////////////////
+  /////////////////////////////
   // Potentiometer readings //
   ///////////////////////////
 
-  swing = ((float)mozziAnalogRead(volumePot) / 1024) + 1;
-  int tempoVal = mozziAnalogRead(tempoPot);
-  byte printTempo = map(tempoVal, 0, 1024, 245, 80);
+  int volumeRead = mozziAnalogRead(volumePot);
+  int tempoRead = mozziAnalogRead(tempoPot);
+  int swingRead = mozziAnalogRead(swingPot);
+  swing = ((float)swingRead / 1024) + 1;
+  printTempo = map(tempoRead, 0, 1024, 245, 80);
+  volume =  map(volumeRead, 0, 1023, 0, 255);
 
-  int volumeVal = mozziAnalogRead(volumePot);
-  volume =  map(volumeVal, 0, 1023, 0, 255);
+  int pitchReadA = mozziAnalogRead(pitchPotA);
+  int pitchReadB = mozziAnalogRead(pitchPotB);
+  int pitchReadC = mozziAnalogRead(pitchPotC);
+  int pitchReadD = mozziAnalogRead(pitchPotD); 
 
   byte stepA = (byte) map(mozziAnalogRead(stepPotA), 0, 1023, 1, MAX_STEPS);
   byte stepB = (byte) map(mozziAnalogRead(stepPotB), 0, 1023, 1, MAX_STEPS);
@@ -189,15 +201,10 @@ void updateControl() {
   byte beatC = (byte) map(mozziAnalogRead(beatPotC), 0, 1023, 0, stepC);
   byte beatD = (byte) map(mozziAnalogRead(beatPotD), 0, 1023, 0, stepD);
   
-  int pitchValA = mozziAnalogRead(pitchPotA);
-  int pitchValB = mozziAnalogRead(pitchPotB);
-  int pitchValC = mozziAnalogRead(pitchPotC);
-  int pitchValD = mozziAnalogRead(pitchPotD);
-  
   if (swingStep % 2 == 0) {
-    tempo = tempoVal / 4 + 70 * swing;
+    tempo = tempoRead / 4 + 70 * swing;
   } else {
-    tempo = tempoVal / 4 + 70 * (2 - swing);
+    tempo = tempoRead / 4 + 70 * (2 - swing);
   }
 
   /*
@@ -222,44 +229,57 @@ void updateControl() {
  
   if (digitalRead(7) == LOW) {
     soundA = &aHatBongo;
+    sampleIdA = 2;
   } else if (digitalRead(8) == LOW) {
     soundA = &aBongo;
+    sampleIdA = 1;
   } else {
     soundA = &aKick;
+    sampleIdA = 0;
   }
 
   if (digitalRead(5) == LOW) {
     soundB = &aConga;
+    sampleIdB = 2;
   } else if (digitalRead(6) == LOW) {
     soundB = &aRim;
+    sampleIdB = 1;
   } else {
     soundB = &aSnare;
+    sampleIdB = 0;
   }
 
   if (digitalRead(3) == LOW) {
     soundC = &aCymbal;
+    sampleIdC = 2;
   } else if (digitalRead(4) == LOW) {
     soundC = &aPercHat;
+    sampleIdC = 1;
   } else {
     soundC = &aHiHat;
+    sampleIdC = 0;
   } 
   
-  if (digitalRead(9) == LOW) {
+  if (digitalRead(40) == LOW) {
     soundD = &aTambourine;
-  } else if (digitalRead(10) == LOW) {
+    sampleIdD = 2;
+  } else if (digitalRead(42) == LOW) {
     soundD = &aCowbell;
+    sampleIdD = 1;
   } else {
     soundD = &aClap;
+    sampleIdD = 0;
   }
 
+  /*
   const int arraySize = 4;
   char pointers[arraySize] = { pointerA, pointerB, pointerC, pointerD };
   char steps[arraySize] = { stepA, stepB, stepC, stepD };
   char beats[arraySize] = { beatA, beatB, beatC, beatD };
   int leds[arraySize] = { ledA, ledB, ledC, ledD };
-  int pitches[arraySize] = { pitchValA, pitchValB, pitchValC, pitchValD };
+  int pitches[arraySize] = { pitchReadA, pitchReadB, pitchReadC, pitchReadD };
   Sample <NUM_CELLS, AUDIO_RATE> *sounds[arraySize] = { soundA, soundB, soundC, soundD };
-
+  
   if(kTriggerDelay.ready()) {
     for (int i = 0; i < arraySize; i++) {
       if (pointers[i] >= steps[i])  {
@@ -270,10 +290,11 @@ void updateControl() {
         (*sounds[i]).start();
         (*sounds[i]).setFreq(setPitch(pitches[i]));
         digitalWrite(leds[i], HIGH);
-        //digitalWrite(!(leds[i]), LOW);
+        digitalWrite(!(leds[i]), LOW);
         digitalWrite(leds[i], LOW);
       }
     }
+    
 
     pointerA++;
     pointerB++;
@@ -283,14 +304,60 @@ void updateControl() {
 
     kTriggerDelay.start(tempo);
   }
+  */
+  const int arraySize = 4;
+  char pointers[arraySize] = { pointerA, pointerB, pointerC, pointerD };
+  char steps[arraySize] = { stepA, stepB, stepC, stepD };
+
+  if(kTriggerDelay.ready()){
+    for (int i = 0; i < arraySize; i++) {
+      if (pointers[i] >= steps[i])  {
+        pointers[i] = 0;
+      }
+    }
+    
+    if(startPlayback(stepA, beatA, pointerA)) {
+      (*soundA).start();
+      (*soundA).setFreq(setPitch(pitchReadA));
+      digitalWrite(ledA, HIGH);
+      digitalWrite(ledA, LOW);
+    }
+    if(startPlayback(stepB, beatB, pointerB)) {
+      (*soundB).start();
+      (*soundB).setFreq(setPitch(pitchReadB));
+      digitalWrite(ledB, HIGH);
+      digitalWrite(ledB, LOW);
+    }
+    if(startPlayback(stepC, beatC, pointerC)) {
+      (*soundC).start();
+      (*soundC).setFreq(setPitch(pitchReadC));
+      digitalWrite(ledC, HIGH);
+      digitalWrite(ledC, LOW);
+    }
+    if(startPlayback(stepD, beatD, pointerD)) {
+      (*soundD).start();
+      (*soundD).setFreq(setPitch(pitchReadD));
+      digitalWrite(ledD, HIGH);
+      digitalWrite(ledD, LOW);
+    }
+
+    pointerA++;
+    pointerB++;
+    pointerC++;
+    pointerD++;
+    swingStep++;
+
+    kTriggerDelay.start(tempo);
+    //Serial.println(printTempo);
+  }
 }
 
 int updateAudio(){
   int gain = (int)
-    ((long) (*soundA).next() * 255 +
-            (*soundB).next() * 255 +
-            (*soundC).next() * 255 +
-            (*soundD).next() * 255) >> 4;
+    ((long) (*soundA).next() * volume +
+            (*soundB).next() * volume +
+            (*soundC).next() * volume +
+            (*soundD).next() * volume) >> 4; // try >> 8
 
   // Mozzi default output range is -244 to 243
   if (gain > 243) {
@@ -303,4 +370,5 @@ int updateAudio(){
 
 void loop() {
   audioHook();
+  //sendData();
 }

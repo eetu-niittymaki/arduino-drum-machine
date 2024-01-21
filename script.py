@@ -14,7 +14,7 @@ from tkinter import filedialog
 from tkinter import *
 from pydub import AudioSegment
 
-sample_count = 2048 * 2
+sample_count = 2048
 samplerate = 16384
 
 try:    
@@ -27,7 +27,7 @@ def raw_to_h(infile, tablename):
         raw_data = raw_file.read()
 
     audio_array = array('B', raw_data)
-    tablename = tablename.split("\\")[::-1][0]
+    tablename = tablename.split("\\")[::-1][0].replace(" ", "_")
 
     output_file_name = os.path.splitext(infile)[0] + ".h"
     with open(output_file_name, 'w') as output:
@@ -64,8 +64,7 @@ def format(file):
         write.setframerate(framerate)
         write.writeframes(data)
 
-    file = file.split(".")[0]
-    ##ffmpeg = ffmpeg_exe + " -y -i " + file + ".wav" +  " -f s8 -acodec pcm_s8 "  + file + ".raw" 
+    file = file.split(".wav")[0]
     ffmpeg = f'{ffmpeg_exe} -y -i "{file}.wav" -f s8 -acodec pcm_s8 "{file}.raw"'
     os.system(ffmpeg)
     raw_to_h(f"{file}.raw", file)
