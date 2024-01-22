@@ -1,7 +1,6 @@
 #include <MozziGuts.h>
 #include <Sample.h>
 #include <EventDelay.h>
-#include <SoftwareSerial.h>
 
 #include "sfx/bongo.h" 
 #include "sfx/conga.h" 
@@ -50,8 +49,6 @@
 #define ledC 9
 #define ledD 10
 
-SoftwareSerial Link(33, 35); // Rx, Tx
-
 //A
 Sample <NUM_CELLS, AUDIO_RATE>aBongo(bongo_DATA);
 Sample <NUM_CELLS, AUDIO_RATE>aHatBongo(hat_bongo_DATA);
@@ -96,14 +93,13 @@ int tempo = 120;
 int swingStep = 1;
 
 byte printTempo;
-int sampleIdA;
+int sampleIdA; 
 int sampleIdB;
-int sampleIdC;
+int sampleIdC; 
 int sampleIdD;
 
 void setup() {
-  Link.begin(115200);
-  Serial.begin(115200);
+  Serial.begin(57600);
   pinMode(onSwitch, INPUT);
   //pinMode(tapSwitch, INPUT);
   pinMode(3, INPUT_PULLUP); // A
@@ -155,24 +151,23 @@ float setPitch(int oldPitch) {
 }
 
 void sendData() {
-  Link.print('<'); // start marker
-  Link.print(buttonState);
-  Link.print(','); // comma separator
-  Link.print(printTempo);
-  Link.print(',');
-  Link.print(sampleIdA);
-  Link.print(',');
-  Link.print(sampleIdB);
-  Link.print(',');
-  Link.print(sampleIdC);
-  Link.print(',');
-  Link.print(sampleIdD);
-  Link.println('>');
+  Serial.print("<");
+  Serial.print(buttonState);
+  Serial.print(",");
+  Serial.print(printTempo);
+  Serial.print(",");
+  Serial.print(sampleIdA);
+  Serial.print(",");
+  Serial.print(sampleIdB);
+  Serial.print(",");
+  Serial.print(sampleIdC);
+  Serial.print(",");
+  Serial.print(sampleIdD);
+  Serial.println(">");
 }
 
 void updateControl() {
   buttonState = digitalRead(onSwitch);
-
   if (swingStep > MAX_STEPS) swingStep = 1;
 
   /////////////////////////////
@@ -226,7 +221,7 @@ void updateControl() {
     digitalWrite(ledD, LOW);
     return;
   }
- 
+
   if (digitalRead(7) == LOW) {
     soundA = &aHatBongo;
     sampleIdA = 2;
@@ -259,7 +254,7 @@ void updateControl() {
     soundC = &aHiHat;
     sampleIdC = 0;
   } 
-  
+
   if (digitalRead(40) == LOW) {
     soundD = &aTambourine;
     sampleIdD = 2;
@@ -270,7 +265,6 @@ void updateControl() {
     soundD = &aClap;
     sampleIdD = 0;
   }
-
   /*
   const int arraySize = 4;
   char pointers[arraySize] = { pointerA, pointerB, pointerC, pointerD };
@@ -348,8 +342,8 @@ void updateControl() {
     swingStep++;
 
     kTriggerDelay.start(tempo);
-    //Serial.println(printTempo);
   }
+  sendData();
 }
 
 int updateAudio(){
@@ -370,5 +364,4 @@ int updateAudio(){
 
 void loop() {
   audioHook();
-  //sendData();
 }

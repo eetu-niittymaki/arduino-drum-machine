@@ -1,7 +1,6 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <SoftwareSerial.h>
 
 #define SCREEN_WIDTH 128  // OLED display width,  in pixels
 #define SCREEN_HEIGHT 64  // OLED display height, in pixels
@@ -11,18 +10,16 @@ Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 const byte numChars = 32;
 char receivedChars[numChars];
-char tempChars[numChars];  
+char tempChars[numChars];   
 
-int tempo = 120;
-int buttonState = 1;
+int tempo;
+int buttonState;
 int idA;
 int idB;
 int idC;
 int idD;
 
 boolean newData = false;
-
-SoftwareSerial Link(3, 5); // Rx, Tx
 
 const unsigned char stopIcon [] PROGMEM = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1e, 0x1e, 0x00, 0x1e, 0x1e, 0x00, 0x1e, 
@@ -46,6 +43,35 @@ char *arrC[3] = { "Hihat  ", "PercHat", "Cymbal " };
 
 char *arrD[3] = { "Clap   ", "Cowbell", "Tamb   " };
 
+void parseData() {      // split the data into its parts
+    char * strtokIindex; // this is used by strtok() as an index
+
+    strtokIindex = strtok(tempChars,",");      // get the first part - the string
+    tempo = atoi(strtokIindex); // copy it to messageFromPC
+ 
+    strtokIindex = strtok(NULL, ","); 
+    buttonState = atoi(strtokIindex);     
+
+    strtokIindex = strtok(NULL, ",");
+    idA = atoi(strtokIindex);    
+
+    strtokIindex = strtok(NULL, ",");
+    idB = atoi(strtokIindex); 
+
+    strtokIindex = strtok(NULL, ",");
+    idC = atoi(strtokIindex); 
+
+    strtokIindex = strtok(NULL, ",");
+    idD = atoi(strtokIindex); 
+}
+/*
+void showParsedData() {
+    Serial.print("Num ");
+    Serial.println(num);
+    Serial.print("Num2 ");
+    Serial.println(num2);
+}
+*/
 void recvWithStartEndMarkers() {
     static boolean recvInProgress = false;
     static byte index = 0;
@@ -53,8 +79,8 @@ void recvWithStartEndMarkers() {
     char endMarker = '>';
     char rc;
 
-    while (Link.available() > 0 && newData == false) {
-        rc = Link.read();
+    while (Serial.available() > 0 && newData == false) {
+        rc = Serial.read();
 
         if (recvInProgress == true) {
             if (rc != endMarker) {
@@ -75,32 +101,8 @@ void recvWithStartEndMarkers() {
     }
 }
 
-void parseData() {      // split the data into its parts
-    char * strtokIindex; // this is used by strtok() as an index
-
-    strtokIindex = strtok(NULL ,",");
-    tempo = atoi(strtokIindex); 
- 
-    strtokIindex = strtok(NULL, ","); 
-    buttonState = atoi(strtokIindex);     
-
-    strtokIindex = strtok(NULL, ",");
-    idA = atoi(strtokIindex);
-
-    strtokIindex = strtok(NULL, ",");
-    idB = atoi(strtokIindex);
-
-    strtokIindex = strtok(NULL, ",");
-    idC = atoi(strtokIindex);
-
-    strtokIindex = strtok(NULL, ",");
-    idD = atoi(strtokIindex);
-}
-
 void setup() {
-  Link.begin(115200);
-  Serial.begin(115200);
-
+  Serial.begin(57600);
   // initialize OLED display with address 0x3C for 128x64
   if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
@@ -115,15 +117,14 @@ void setup() {
 
 void loop() {
   recvWithStartEndMarkers();
-  if (newData == true) {
-    strcpy(tempChars, receivedChars);
-    //parseData();
-    newData = false;
-  }
-
-  if (tempo > 140) {
-    tempo = 120;
-  }
+    if (newData == true) {
+        strcpy(tempChars, receivedChars);
+            // this temporary copy is necessary to protect the original data
+            //   because strtok() used in parseData() replaces the commas with \0
+        parseData();
+        //showParsedData();
+        newData = false;
+    }
 
   oled.setCursor(5, 0);
   oled.print("A: ");
@@ -160,7 +161,5 @@ void loop() {
   oled.println(arrD[idD]);
   oled.display();
 
-  tempo++;
-  delay(2000);
-  //oled.clearDisplay();
+  delay(500);
 }
