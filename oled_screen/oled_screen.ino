@@ -12,8 +12,8 @@ const byte numChars = 32;
 char receivedChars[numChars];
 char tempChars[numChars];   
 
-int tempo;
 int buttonState;
+int tempo;
 int idA;
 int idB;
 int idC;
@@ -35,26 +35,23 @@ const unsigned char playIcon [] PROGMEM = {
 	0x00, 0x00
 };
 
-char *arrA[3] = { "Kick ", "Bongo", "Hat  "};
-
-char *arrB[3] = { "Snare", "Rim  ", "Conga" };
-
+char *arrA[3] = { "Kick ", "Bongo", "Hat  "};  // Values in arrays need to be the same length or characters from
+char *arrB[3] = { "Snare", "Rim  ", "Conga" }; // previous values will stay drawn on screen after change
 char *arrC[3] = { "Hihat  ", "PercHat", "Cymbal " };
-
 char *arrD[3] = { "Clap   ", "Cowbell", "Tamb   " };
 
-void parseData() {      // split the data into its parts
-    char * strtokIindex; // this is used by strtok() as an index
+void parseData() {
+    char * strtokIindex; 
 
-    strtokIindex = strtok(tempChars,",");      // get the first part - the string
-    tempo = atoi(strtokIindex); // copy it to messageFromPC
+    strtokIindex = strtok(tempChars, ",");  // This is correct, don't change     
+    buttonState = atoi(strtokIindex); // 
  
     strtokIindex = strtok(NULL, ","); 
-    buttonState = atoi(strtokIindex);     
-
+    tempo = atoi(strtokIindex);     
+    
     strtokIindex = strtok(NULL, ",");
     idA = atoi(strtokIindex);    
-
+  
     strtokIindex = strtok(NULL, ",");
     idB = atoi(strtokIindex); 
 
@@ -62,26 +59,27 @@ void parseData() {      // split the data into its parts
     idC = atoi(strtokIindex); 
 
     strtokIindex = strtok(NULL, ",");
-    idD = atoi(strtokIindex); 
+    idD = atoi(strtokIindex);
 }
-/*
+
 void showParsedData() {
-    Serial.print("Num ");
-    Serial.println(num);
-    Serial.print("Num2 ");
-    Serial.println(num2);
+   Serial.println(buttonState);
+   Serial.println(tempo);
+   Serial.println(idA);
+   Serial.println(idB);
+   Serial.println(idC);
+   Serial.println(idD);
 }
-*/
+
 void recvWithStartEndMarkers() {
     static boolean recvInProgress = false;
     static byte index = 0;
-    char startMarker = '<';
-    char endMarker = '>';
+    char startMarker = '[';
+    char endMarker = ']';
     char rc;
 
     while (Serial.available() > 0 && newData == false) {
         rc = Serial.read();
-
         if (recvInProgress == true) {
             if (rc != endMarker) {
                 receivedChars[index] = rc;
@@ -101,30 +99,8 @@ void recvWithStartEndMarkers() {
     }
 }
 
-void setup() {
-  Serial.begin(57600);
-  // initialize OLED display with address 0x3C for 128x64
-  if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("SSD1306 allocation failed"));
-    while (true);
-  }
-
-  delay(2000);  // wait for initializing
-  oled.clearDisplay();
-  oled.setTextColor(WHITE, BLACK);
+void draw() {
   oled.setTextSize(1);
-}
-
-void loop() {
-  recvWithStartEndMarkers();
-    if (newData == true) {
-        strcpy(tempChars, receivedChars);
-            // this temporary copy is necessary to protect the original data
-            //   because strtok() used in parseData() replaces the commas with \0
-        parseData();
-        //showParsedData();
-        newData = false;
-    }
 
   oled.setCursor(5, 0);
   oled.print("A: ");
@@ -134,6 +110,16 @@ void loop() {
   oled.setCursor(65, 0);
   oled.print("B: ");
   oled.println(arrB[idB]);
+  oled.display();
+  
+  oled.setCursor(5, 50);
+  oled.print("C: ");
+  oled.println(arrC[idC]);
+  oled.display();
+
+  oled.setCursor(65, 50);
+  oled.print("D: ");
+  oled.println(arrD[idD]);
   oled.display();
 
   if (buttonState == 1) {
@@ -147,19 +133,32 @@ void loop() {
   oled.setTextSize(2);
   oled.setCursor(30, 20);
   oled.print(tempo);
-  oled.println(" BPM");
+  oled.print(" BPM");
   oled.display();
-  oled.setTextSize(1);
+}
 
-  oled.setCursor(5, 50);
-  oled.print("C: ");
-  oled.println(arrC[idC]);
-  oled.display();
+void setup() {
+  Serial.begin(9600);
+  // initialize OLED display with address 0x3C for 128x64
+  if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    while (true);
+  }
+  //delay(1000);
+  oled.clearDisplay();
+  oled.setTextColor(WHITE, BLACK);
+  oled.setTextSize(2);
+}
 
-  oled.setCursor(65, 50);
-  oled.print("D: ");
-  oled.println(arrD[idD]);
-  oled.display();
-
-  delay(500);
+void loop() {
+  recvWithStartEndMarkers();
+  if (newData == true) {
+    strcpy(tempChars, receivedChars);
+            // this temporary copy is necessary to protect the original data
+            //   because strtok() used in parseData() replaces the commas with \0
+    parseData();
+    showParsedData();
+    newData = false;
+  }
+  draw();
 }

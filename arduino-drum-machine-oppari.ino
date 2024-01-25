@@ -75,8 +75,9 @@ Sample <NUM_CELLS, AUDIO_RATE> *soundB = &aSnare;
 Sample <NUM_CELLS, AUDIO_RATE> *soundC = &aHiHat;
 Sample <NUM_CELLS, AUDIO_RATE> *soundD = &aClap;
 
-// Schedules sampels to start
-EventDelay kTriggerDelay;
+
+EventDelay kTriggerDelay; // Schedules sampels to start
+EventDelay delayTx; // So serial receiver device doesn't get flooded with data
 
 int buttonState = 0;
 
@@ -88,7 +89,6 @@ byte pointerD = 0;
 byte volume;
 float swing;
 const float recorded_pitch =  (float)SAMPLERATE / (float)NUM_CELLS;
-
 int tempo = 120;
 int swingStep = 1;
 
@@ -99,7 +99,7 @@ int sampleIdC;
 int sampleIdD;
 
 void setup() {
-  Serial.begin(57600);
+  Serial.begin(9600);
   pinMode(onSwitch, INPUT);
   //pinMode(tapSwitch, INPUT);
   pinMode(3, INPUT_PULLUP); // A
@@ -135,6 +135,7 @@ void setup() {
   aCowbell.setFreq((float) cowbell_SAMPLERATE / (float) NUM_CELLS); 
 
   kTriggerDelay.set(10);
+  delayTx.set(300); 
 }
 
 bool startPlayback(byte stepCount, byte beatCount, byte pointer) {
@@ -146,24 +147,60 @@ bool startPlayback(byte stepCount, byte beatCount, byte pointer) {
   return { (pointer == 0) ? start = (beatCount != 0) : start = (count > prevCount) };
 }
 
+void playSample(byte step, byte beat, byte pointer, 
+                Sample <NUM_CELLS, AUDIO_RATE> *sample, int pitch, int led) {
+  if(startPlayback(step, beat, pointer)) {
+      (*sample).start();
+      (*sample).setFreq(setPitch(pitch));
+      digitalWrite(led, HIGH);
+      digitalWrite(led, LOW);
+  }
+}
+
+void readSwitches(Sample <NUM_CELLS, AUDIO_RATE> *sound, 
+                  Sample <NUM_CELLS, AUDIO_RATE> &sample1,
+                  Sample <NUM_CELLS, AUDIO_RATE> &sample2,
+                  Sample <NUM_CELLS, AUDIO_RATE> &sample3,
+                  int switch1, int switch2, int sampleId) {
+    if (digitalRead(switch1) == LOW) {
+      sound = &sample1;
+      sampleId = 2;
+    } else if (digitalRead(switch2) == LOW) {
+      sound = &sample2;
+      sampleId = 1;
+    } else {
+      sound = &sample3;
+      sampleId = 0;
+    }
+}
+
 float setPitch(int oldPitch) {
   return { (recorded_pitch * (float) oldPitch / 512.f) + 0.1f };
 }
 
-void sendData() {
-  Serial.print("<");
-  Serial.print(buttonState);
-  Serial.print(",");
-  Serial.print(printTempo);
-  Serial.print(",");
-  Serial.print(sampleIdA);
-  Serial.print(",");
-  Serial.print(sampleIdB);
-  Serial.print(",");
-  Serial.print(sampleIdC);
-  Serial.print(",");
-  Serial.print(sampleIdD);
-  Serial.println(">");
+void sendData() { // This is correct, don't change
+  if (delayTx.ready()) {
+    Serial.print('[');
+    Serial.print(buttonState);
+    Serial.print(",");
+    delayTx.start();
+    Serial.print(printTempo);
+    Serial.print(",");
+    delayTx.start();
+    Serial.print(sampleIdA);
+    Serial.print(",");
+    delayTx.start();
+    Serial.print(sampleIdB);
+    Serial.print(",");
+    delayTx.start();
+    Serial.print(sampleIdC);
+    Serial.print(",");
+    delayTx.start();
+    Serial.print(sampleIdD); 
+    delayTx.start();
+    Serial.print(']');
+    Serial.println();
+  }
 }
 
 void updateControl() {
@@ -173,12 +210,11 @@ void updateControl() {
   /////////////////////////////
   // Potentiometer readings //
   ///////////////////////////
-
   int volumeRead = mozziAnalogRead(volumePot);
   int tempoRead = mozziAnalogRead(tempoPot);
   int swingRead = mozziAnalogRead(swingPot);
   swing = ((float)swingRead / 1024) + 1;
-  printTempo = map(tempoRead, 0, 1024, 245, 80);
+  printTempo = map(tempoRead, 0, 1023, 245, 80);
   volume =  map(volumeRead, 0, 1023, 0, 255);
 
   int pitchReadA = mozziAnalogRead(pitchPotA);
@@ -208,24 +244,10 @@ void updateControl() {
   //return the value
   float voltage = (val * 5.0) / 1024.0;
   */
-
-  //////////////////////
-  // Switch readings //
-  ////////////////////
-
-  // If switch not at ON position, stop playback, turn leds off
-  if (digitalRead(onSwitch) == LOW) {
-    digitalWrite(ledA, LOW);
-    digitalWrite(ledB, LOW);
-    digitalWrite(ledC, LOW);
-    digitalWrite(ledD, LOW);
-    return;
-  }
-
-  if (digitalRead(7) == LOW) {
+  if (digitalRead(3) == LOW) {
     soundA = &aHatBongo;
     sampleIdA = 2;
-  } else if (digitalRead(8) == LOW) {
+  } else if (digitalRead(4) == LOW) {
     soundA = &aBongo;
     sampleIdA = 1;
   } else {
@@ -244,10 +266,10 @@ void updateControl() {
     sampleIdB = 0;
   }
 
-  if (digitalRead(3) == LOW) {
+  if (digitalRead(7) == LOW) {
     soundC = &aCymbal;
     sampleIdC = 2;
-  } else if (digitalRead(4) == LOW) {
+  } else if (digitalRead(8) == LOW) {
     soundC = &aPercHat;
     sampleIdC = 1;
   } else {
@@ -266,29 +288,38 @@ void updateControl() {
     sampleIdD = 0;
   }
   /*
+  readSwitches(soundA, aHatBongo, aBongo, aKick, 7, 8, sampleIdA);
+  readSwitches(soundB, aConga, aRim, aSnare, 5, 6, sampleIdB);
+  readSwitches(soundC, aCymbal, aPercHat, aHiHat, 3, 4, sampleIdC);
+  readSwitches(soundD, aTambourine, aCowbell, aClap, 40, 42, sampleIdD);
+  */
+
+  sendData();
+
+   // If switch not at ON position, stop playback, turn leds off
+  if (digitalRead(onSwitch) == LOW) {
+    digitalWrite(ledA, LOW);
+    digitalWrite(ledB, LOW);
+    digitalWrite(ledC, LOW);
+    digitalWrite(ledD, LOW);
+    return;
+  }
+
   const int arraySize = 4;
   char pointers[arraySize] = { pointerA, pointerB, pointerC, pointerD };
   char steps[arraySize] = { stepA, stepB, stepC, stepD };
-  char beats[arraySize] = { beatA, beatB, beatC, beatD };
-  int leds[arraySize] = { ledA, ledB, ledC, ledD };
-  int pitches[arraySize] = { pitchReadA, pitchReadB, pitchReadC, pitchReadD };
-  Sample <NUM_CELLS, AUDIO_RATE> *sounds[arraySize] = { soundA, soundB, soundC, soundD };
-  
+
   if(kTriggerDelay.ready()) {
     for (int i = 0; i < arraySize; i++) {
       if (pointers[i] >= steps[i])  {
         pointers[i] = 0;
       }
-
-      if (startPlayback(steps[i], beats[i], pointers[i])) {
-        (*sounds[i]).start();
-        (*sounds[i]).setFreq(setPitch(pitches[i]));
-        digitalWrite(leds[i], HIGH);
-        digitalWrite(!(leds[i]), LOW);
-        digitalWrite(leds[i], LOW);
-      }
     }
-    
+
+    playSample(stepA, beatA, pointerA, soundA, pitchReadA, ledA);
+    playSample(stepB, beatB, pointerB, soundB, pitchReadB, ledB);
+    playSample(stepC, beatC, pointerC, soundC, pitchReadC, ledC);
+    playSample(stepD, beatD, pointerD, soundD, pitchReadD, ledD);
 
     pointerA++;
     pointerB++;
@@ -298,52 +329,6 @@ void updateControl() {
 
     kTriggerDelay.start(tempo);
   }
-  */
-  const int arraySize = 4;
-  char pointers[arraySize] = { pointerA, pointerB, pointerC, pointerD };
-  char steps[arraySize] = { stepA, stepB, stepC, stepD };
-
-  if(kTriggerDelay.ready()){
-    for (int i = 0; i < arraySize; i++) {
-      if (pointers[i] >= steps[i])  {
-        pointers[i] = 0;
-      }
-    }
-    
-    if(startPlayback(stepA, beatA, pointerA)) {
-      (*soundA).start();
-      (*soundA).setFreq(setPitch(pitchReadA));
-      digitalWrite(ledA, HIGH);
-      digitalWrite(ledA, LOW);
-    }
-    if(startPlayback(stepB, beatB, pointerB)) {
-      (*soundB).start();
-      (*soundB).setFreq(setPitch(pitchReadB));
-      digitalWrite(ledB, HIGH);
-      digitalWrite(ledB, LOW);
-    }
-    if(startPlayback(stepC, beatC, pointerC)) {
-      (*soundC).start();
-      (*soundC).setFreq(setPitch(pitchReadC));
-      digitalWrite(ledC, HIGH);
-      digitalWrite(ledC, LOW);
-    }
-    if(startPlayback(stepD, beatD, pointerD)) {
-      (*soundD).start();
-      (*soundD).setFreq(setPitch(pitchReadD));
-      digitalWrite(ledD, HIGH);
-      digitalWrite(ledD, LOW);
-    }
-
-    pointerA++;
-    pointerB++;
-    pointerC++;
-    pointerD++;
-    swingStep++;
-
-    kTriggerDelay.start(tempo);
-  }
-  sendData();
 }
 
 int updateAudio(){
