@@ -1,19 +1,20 @@
 #include <MozziGuts.h>
 #include <Sample.h>
 #include <EventDelay.h>
+#include <LowPassFilter.h>
 
-#include "sfx/bongo.h" 
-#include "sfx/conga.h" 
-#include "sfx/cymbal.h" 
-#include "sfx/hihat.h"
-#include "sfx/kick.h" 
-#include "sfx/snare.h" 
-#include "sfx/rim.h" 
-#include "sfx/perc_hat.h" 
-#include "sfx/hat_bongo.h" 
-#include "sfx/clap.h" 
-#include "sfx/cowbell.h" 
-#include "sfx/tambourine.h" 
+#include "samples/bongo.h" 
+#include "samples/conga.h" 
+#include "samples/cymbal.h" 
+#include "samples/hihat.h"
+#include "samples/kick.h" 
+#include "samples/snare.h" 
+#include "samples/rim.h" 
+#include "samples/perc_hat.h" 
+#include "samples/hat_bongo.h" 
+#include "samples/clap.h" 
+#include "samples/cowbell.h" 
+#include "samples/tambourine.h" 
 
 #define NUM_CELLS 2048 // Make sure this is the same as in .h wavetable files
 #define SAMPLERATE 16384
@@ -22,6 +23,7 @@
 #define MAX_STEPS 16
 
 // Analog
+#define filterPot 0
 #define tempoPot 9
 #define volumePot 10
 #define swingPot 11
@@ -40,14 +42,13 @@
 #define pitchPotB 13
 #define pitchPotC 14 
 #define pitchPotD 15
-// use for pin 0?
 
 // Digital
 #define onSwitch 2
 #define ledA 28
 #define ledB 12
 #define ledC 9
-#define ledD 10
+#define ledD 35
 
 //A
 Sample <NUM_CELLS, AUDIO_RATE>aBongo(bongo_DATA);
@@ -75,11 +76,10 @@ Sample <NUM_CELLS, AUDIO_RATE> *soundB = &aSnare;
 Sample <NUM_CELLS, AUDIO_RATE> *soundC = &aHiHat;
 Sample <NUM_CELLS, AUDIO_RATE> *soundD = &aClap;
 
-
 EventDelay kTriggerDelay; // Schedules sampels to start
 EventDelay delayTx; // So serial receiver device doesn't get flooded with data
 
-int buttonState = 0;
+unsigned int readOnSwitch = 0;
 
 byte pointerA = 0;
 byte pointerB = 0;
@@ -88,15 +88,16 @@ byte pointerD = 0;
 
 byte volume;
 float swing;
+byte filter;
 const float recorded_pitch =  (float)SAMPLERATE / (float)NUM_CELLS;
-int tempo = 120;
-int swingStep = 1;
+unsigned int tempo = 120;
+byte swingStep = 1;
 
-byte printTempo;
-int sampleIdA; 
-int sampleIdB;
-int sampleIdC; 
-int sampleIdD;
+unsigned int printTempo;
+byte sampleIdA; 
+byte sampleIdB;
+byte sampleIdC; 
+byte sampleIdD;
 
 void setup() {
   Serial.begin(9600);
@@ -110,7 +111,8 @@ void setup() {
   pinMode(8, INPUT_PULLUP);
   pinMode(40, INPUT_PULLUP); // D
   pinMode(42, INPUT_PULLUP);
-  pinMode(11, OUTPUT); //9 for Nano, 11 for Mega
+  //pinMode(10, OUTPUT); 
+  //pinMode(11, OUTPUT); //9 for Nano, 11 for Mega
   pinMode(ledA, OUTPUT);
   pinMode(ledB, OUTPUT);
   pinMode(ledC, OUTPUT);
@@ -135,7 +137,7 @@ void setup() {
   aCowbell.setFreq((float) cowbell_SAMPLERATE / (float) NUM_CELLS); 
 
   kTriggerDelay.set(10);
-  delayTx.set(300); 
+  delayTx.set(350); 
 }
 
 bool startPlayback(byte stepCount, byte beatCount, byte pointer) {
@@ -156,7 +158,7 @@ void playSample(byte step, byte beat, byte pointer,
       digitalWrite(led, LOW);
   }
 }
-
+/*
 void readSwitches(Sample <NUM_CELLS, AUDIO_RATE> *sound, 
                   Sample <NUM_CELLS, AUDIO_RATE> &sample1,
                   Sample <NUM_CELLS, AUDIO_RATE> &sample2,
@@ -173,18 +175,18 @@ void readSwitches(Sample <NUM_CELLS, AUDIO_RATE> *sound,
       sampleId = 0;
     }
 }
-
+*/
 float setPitch(int oldPitch) {
   return { (recorded_pitch * (float) oldPitch / 512.f) + 0.1f };
 }
 
-void sendData() { // This is correct, don't change
+void sendData() { 
   if (delayTx.ready()) {
     Serial.print('[');
-    Serial.print(buttonState);
+    Serial.print(readOnSwitch);
     Serial.print(",");
     delayTx.start();
-    Serial.print(printTempo);
+    Serial.print(millisToBPM(printTempo));
     Serial.print(",");
     delayTx.start();
     Serial.print(sampleIdA);
@@ -203,24 +205,31 @@ void sendData() { // This is correct, don't change
   }
 }
 
+unsigned int millisToBPM(unsigned int millis) {
+  unsigned int BPM = 60000 / millis;
+  return BPM;
+}
+
 void updateControl() {
-  buttonState = digitalRead(onSwitch);
+  readOnSwitch = digitalRead(onSwitch);
   if (swingStep > MAX_STEPS) swingStep = 1;
 
   /////////////////////////////
   // Potentiometer readings //
   ///////////////////////////
-  int volumeRead = mozziAnalogRead(volumePot);
-  int tempoRead = mozziAnalogRead(tempoPot);
-  int swingRead = mozziAnalogRead(swingPot);
-  swing = ((float)swingRead / 1024) + 1;
-  printTempo = map(tempoRead, 0, 1023, 245, 80);
+  unsigned int volumeRead = mozziAnalogRead(volumePot);
+  unsigned int tempoRead = mozziAnalogRead(tempoPot);
+  unsigned int swingRead = mozziAnalogRead(swingPot);
+  unsigned int filterRead = mozziAnalogRead(filterPot);
   volume =  map(volumeRead, 0, 1023, 0, 255);
+  tempo = map(tempoRead, 0, 1023, 250, 1500); // 250 - 1500 milliseconds gives a range of 40 - 240 BPM at 1/4 notes
+  swing = ((float)swingRead / 1024) + 1;
+  filter = map(filterRead, 0, 1023, 0, 255);
 
-  int pitchReadA = mozziAnalogRead(pitchPotA);
-  int pitchReadB = mozziAnalogRead(pitchPotB);
-  int pitchReadC = mozziAnalogRead(pitchPotC);
-  int pitchReadD = mozziAnalogRead(pitchPotD); 
+  unsigned int pitchReadA = mozziAnalogRead(pitchPotA);
+  unsigned int pitchReadB = mozziAnalogRead(pitchPotB);
+  unsigned int pitchReadC = mozziAnalogRead(pitchPotC);
+  unsigned int pitchReadD = mozziAnalogRead(pitchPotD); 
 
   byte stepA = (byte) map(mozziAnalogRead(stepPotA), 0, 1023, 1, MAX_STEPS);
   byte stepB = (byte) map(mozziAnalogRead(stepPotB), 0, 1023, 1, MAX_STEPS);
@@ -232,18 +241,14 @@ void updateControl() {
   byte beatC = (byte) map(mozziAnalogRead(beatPotC), 0, 1023, 0, stepC);
   byte beatD = (byte) map(mozziAnalogRead(beatPotD), 0, 1023, 0, stepD);
   
+  printTempo = tempo;
+  
   if (swingStep % 2 == 0) {
-    tempo = tempoRead / 4 + 70 * swing;
+    tempo = tempo / 4 + 70  * swing;
   } else {
-    tempo = tempoRead / 4 + 70 * (2 - swing);
+    tempo = tempo / 4 + 70 * (2 - swing);
   }
 
-  /*
-  int val = mozziAnalogRead(SIG_pin);
-
-  //return the value
-  float voltage = (val * 5.0) / 1024.0;
-  */
   if (digitalRead(3) == LOW) {
     soundA = &aHatBongo;
     sampleIdA = 2;
@@ -288,16 +293,16 @@ void updateControl() {
     sampleIdD = 0;
   }
   /*
-  readSwitches(soundA, aHatBongo, aBongo, aKick, 7, 8, sampleIdA);
+  readSwitches(soundA, aHatBongo, aBongo, aKick, 3, 4, sampleIdA);
   readSwitches(soundB, aConga, aRim, aSnare, 5, 6, sampleIdB);
-  readSwitches(soundC, aCymbal, aPercHat, aHiHat, 3, 4, sampleIdC);
+  readSwitches(soundC, aCymbal, aPercHat, aHiHat, 7, 8, sampleIdC);
   readSwitches(soundD, aTambourine, aCowbell, aClap, 40, 42, sampleIdD);
   */
 
   sendData();
 
    // If switch not at ON position, stop playback, turn leds off
-  if (digitalRead(onSwitch) == LOW) {
+  if (readOnSwitch == 0) {
     digitalWrite(ledA, LOW);
     digitalWrite(ledB, LOW);
     digitalWrite(ledC, LOW);
@@ -331,12 +336,12 @@ void updateControl() {
   }
 }
 
-int updateAudio(){
+int updateAudio() {
   int gain = (int)
-    ((long) (*soundA).next() * volume +
-            (*soundB).next() * volume +
-            (*soundC).next() * volume +
-            (*soundD).next() * volume) >> 4; // try >> 8
+    ( (long)((*soundA).next() * volume) +
+            ((*soundB).next() * volume) +
+            ((*soundC).next() * volume) +
+            ((*soundD).next() * volume) ) >> 8; // try >> 8
 
   // Mozzi default output range is -244 to 243
   if (gain > 243) {
