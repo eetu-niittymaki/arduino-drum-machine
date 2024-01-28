@@ -79,7 +79,7 @@ Sample <NUM_CELLS, AUDIO_RATE> *soundD = &aClap;
 EventDelay kTriggerDelay; // Schedules sampels to start
 EventDelay delayTx; // So serial receiver device doesn't get flooded with data
 
-unsigned int readOnSwitch = 0;
+uint8_t readOnSwitch = 0;
 
 byte pointerA = 0;
 byte pointerB = 0;
@@ -90,8 +90,8 @@ byte volume;
 float swing;
 byte filter;
 const float recorded_pitch =  (float)SAMPLERATE / (float)NUM_CELLS;
-unsigned int tempo = 120;
-byte swingStep = 1;
+unsigned int tempo;
+uint8_t swingStep = 1;
 
 unsigned int printTempo;
 byte sampleIdA; 
@@ -186,7 +186,7 @@ void sendData() {
     Serial.print(readOnSwitch);
     Serial.print(",");
     delayTx.start();
-    Serial.print(millisToBPM(printTempo));
+    Serial.print(printTempo);
     Serial.print(",");
     delayTx.start();
     Serial.print(sampleIdA);
@@ -205,13 +205,14 @@ void sendData() {
   }
 }
 
-unsigned int millisToBPM(unsigned int millis) {
-  unsigned int BPM = 60000 / millis;
-  return BPM;
+unsigned int millisToBPM_ToMillis(unsigned int value) {
+  unsigned int calc = 60000 / value;
+  return calc;
 }
 
 void updateControl() {
   readOnSwitch = digitalRead(onSwitch);
+
   if (swingStep > MAX_STEPS) swingStep = 1;
 
   /////////////////////////////
@@ -222,8 +223,8 @@ void updateControl() {
   unsigned int swingRead = mozziAnalogRead(swingPot);
   unsigned int filterRead = mozziAnalogRead(filterPot);
   volume =  map(volumeRead, 0, 1023, 0, 255);
-  tempo = map(tempoRead, 0, 1023, 250, 1500); // 250 - 1500 milliseconds gives a range of 40 - 240 BPM at 1/4 notes
-  swing = ((float)swingRead / 1024) + 1;
+  tempo = map(tempoRead, 0, 1023, 214, 1000); // 214 - 1000 milliseconds gives a range of 50 - 280 BPM at 1/4 notes
+  swing = map(swingRead, 02, 1023, 0, 75);
   filter = map(filterRead, 0, 1023, 0, 255);
 
   unsigned int pitchReadA = mozziAnalogRead(pitchPotA);
@@ -240,15 +241,15 @@ void updateControl() {
   byte beatB = (byte) map(mozziAnalogRead(beatPotB), 0, 1023, 0, stepB);
   byte beatC = (byte) map(mozziAnalogRead(beatPotC), 0, 1023, 0, stepC);
   byte beatD = (byte) map(mozziAnalogRead(beatPotD), 0, 1023, 0, stepD);
-  
+
+  tempo = millisToBPM_ToMillis(tempo);
   printTempo = tempo;
   
   if (swingStep % 2 == 0) {
-    tempo = tempo / 4 + 70  * swing;
+    tempo = tempo - swing;
   } else {
-    tempo = tempo / 4 + 70 * (2 - swing);
+    tempo = tempo + swing;
   }
-
   if (digitalRead(3) == LOW) {
     soundA = &aHatBongo;
     sampleIdA = 2;
@@ -332,7 +333,7 @@ void updateControl() {
     pointerD++;
     swingStep++;
 
-    kTriggerDelay.start(tempo);
+    kTriggerDelay.start(millisToBPM_ToMillis(tempo));
   }
 }
 
