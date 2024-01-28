@@ -1,7 +1,11 @@
 #include <MozziGuts.h>
 #include <Sample.h>
 #include <EventDelay.h>
-#include <LowPassFilter.h>
+#include <ReverbTank.h>
+#include <Oscil.h>
+
+#include <tables/cos8192_int8.h>
+#include <tables/envelop2048_uint8.h>
 
 #include "samples/bongo.h" 
 #include "samples/conga.h" 
@@ -23,7 +27,7 @@
 #define MAX_STEPS 16
 
 // Analog
-#define filterPot 0
+#define reverbPot 0
 #define tempoPot 9
 #define volumePot 10
 #define swingPot 11
@@ -78,6 +82,7 @@ Sample <NUM_CELLS, AUDIO_RATE> *soundD = &aClap;
 
 EventDelay kTriggerDelay; // Schedules sampels to start
 EventDelay delayTx; // So serial receiver device doesn't get flooded with data
+ReverbTank reverb;
 
 uint8_t readOnSwitch = 0;
 
@@ -87,13 +92,13 @@ byte pointerC = 0;
 byte pointerD = 0;
 
 byte volume;
-float swing;
-byte filter;
+byte swing;
+byte reverbSet;
 const float recorded_pitch =  (float)SAMPLERATE / (float)NUM_CELLS;
-unsigned int tempo;
+unsigned short int tempo;
 uint8_t swingStep = 1;
 
-unsigned int printTempo;
+unsigned short int printTempo;
 byte sampleIdA; 
 byte sampleIdB;
 byte sampleIdC; 
@@ -205,7 +210,7 @@ void sendData() {
   }
 }
 
-unsigned int millisToBPM_ToMillis(unsigned int value) {
+unsigned int millisTo_BPM_ToMillis(unsigned int value) {
   unsigned int calc = 60000 / value;
   return calc;
 }
@@ -221,11 +226,11 @@ void updateControl() {
   unsigned int volumeRead = mozziAnalogRead(volumePot);
   unsigned int tempoRead = mozziAnalogRead(tempoPot);
   unsigned int swingRead = mozziAnalogRead(swingPot);
-  unsigned int filterRead = mozziAnalogRead(filterPot);
+  unsigned int reverbRead = mozziAnalogRead(reverbPot);
   volume =  map(volumeRead, 0, 1023, 0, 255);
   tempo = map(tempoRead, 0, 1023, 214, 1000); // 214 - 1000 milliseconds gives a range of 50 - 280 BPM at 1/4 notes
-  swing = map(swingRead, 02, 1023, 0, 75);
-  filter = map(filterRead, 0, 1023, 0, 255);
+  swing = map(swingRead, 0, 1023, 0, 75);
+  reverbSet = map(reverbRead, 0, 1023, 3, 0);
 
   unsigned int pitchReadA = mozziAnalogRead(pitchPotA);
   unsigned int pitchReadB = mozziAnalogRead(pitchPotB);
@@ -242,7 +247,7 @@ void updateControl() {
   byte beatC = (byte) map(mozziAnalogRead(beatPotC), 0, 1023, 0, stepC);
   byte beatD = (byte) map(mozziAnalogRead(beatPotD), 0, 1023, 0, stepD);
 
-  tempo = millisToBPM_ToMillis(tempo);
+  tempo = millisTo_BPM_ToMillis(tempo);
   printTempo = tempo;
   
   if (swingStep % 2 == 0) {
@@ -333,7 +338,7 @@ void updateControl() {
     pointerD++;
     swingStep++;
 
-    kTriggerDelay.start(millisToBPM_ToMillis(tempo));
+    kTriggerDelay.start(millisTo_BPM_ToMillis(tempo));
   }
 }
 
@@ -344,13 +349,15 @@ int updateAudio() {
             ((*soundC).next() * volume) +
             ((*soundD).next() * volume) ) >> 8; // try >> 8
 
+  int arev = reverb.next(gain);
+
   // Mozzi default output range is -244 to 243
   if (gain > 243) {
     gain = 243;
   } else if (gain < -244) {
     gain = -244; 
   }
-  return gain;
+  return gain + (arev >> reverbSet);
 }
 
 void loop() {
