@@ -2,10 +2,7 @@
 #include <Sample.h>
 #include <EventDelay.h>
 #include <ReverbTank.h>
-#include <Oscil.h>
-
-#include <tables/cos8192_int8.h>
-#include <tables/envelop2048_uint8.h>
+#include <Phasor.h>
 
 #include "samples/bongo.h" 
 #include "samples/conga.h" 
@@ -80,32 +77,34 @@ Sample <NUM_CELLS, AUDIO_RATE> *soundB = &aSnare;
 Sample <NUM_CELLS, AUDIO_RATE> *soundC = &aHiHat;
 Sample <NUM_CELLS, AUDIO_RATE> *soundD = &aClap;
 
+Phasor <CONTROL_RATE> kPan;
 EventDelay kTriggerDelay; // Schedules sampels to start
 EventDelay delayTx; // So serial receiver device doesn't get flooded with data
 ReverbTank reverb;
 
+unsigned int pan;
+
 uint8_t readOnSwitch = 0;
 
-byte pointerA = 0;
-byte pointerB = 0;
-byte pointerC = 0;
-byte pointerD = 0;
+uint8_t pointerA = 0;
+uint8_t pointerB = 0;
+uint8_t pointerC = 0;
+uint8_t pointerD = 0;
 
-byte volume;
-byte swing;
-byte reverbSet;
+uint8_t volume;
+uint8_t swing;
+uint8_t reverbSet;
 const float recorded_pitch =  (float)SAMPLERATE / (float)NUM_CELLS;
 unsigned short int tempo;
 uint8_t swingStep = 1;
 
 unsigned short int printTempo;
-byte sampleIdA; 
-byte sampleIdB;
-byte sampleIdC; 
-byte sampleIdD;
+uint8_t sampleIdA; 
+uint8_t sampleIdB;
+uint8_t sampleIdC; 
+uint8_t sampleIdD;
 
 void setup() {
-  Serial.begin(9600);
   pinMode(onSwitch, INPUT);
   //pinMode(tapSwitch, INPUT);
   pinMode(3, INPUT_PULLUP); // A
@@ -123,7 +122,11 @@ void setup() {
   pinMode(ledC, OUTPUT);
   pinMode(ledD, OUTPUT);
 
+  kPan.setFreq(0.25f);
+
   startMozzi(CONTROL_RATE);
+
+  Serial.begin(9600);
 
   aBongo.setFreq((float) bongo_SAMPLERATE / (float) NUM_CELLS); 
   aHatBongo.setFreq((float) hat_bongo_SAMPLERATE / (float) NUM_CELLS); 
@@ -145,17 +148,17 @@ void setup() {
   delayTx.set(350); 
 }
 
-bool startPlayback(byte stepCount, byte beatCount, byte pointer) {
+bool startPlayback(uint8_t stepCount, uint8_t beatCount, uint8_t pointer) {
   float divider = ((float)beatCount / (float)stepCount);
   bool start;
-  byte count = pointer * divider;
-  byte prevCount = (pointer - 1) * divider;
+  uint8_t count = pointer * divider;
+  uint8_t prevCount = (pointer - 1) * divider;
 
   return { (pointer == 0) ? start = (beatCount != 0) : start = (count > prevCount) };
 }
 
-void playSample(byte step, byte beat, byte pointer, 
-                Sample <NUM_CELLS, AUDIO_RATE> *sample, int pitch, int led) {
+void playSample(uint8_t step, uint8_t beat, uint8_t pointer, 
+                Sample <NUM_CELLS, AUDIO_RATE> *sample, unsigned int pitch, uint8_t led) {
   if(startPlayback(step, beat, pointer)) {
       (*sample).start();
       (*sample).setFreq(setPitch(pitch));
@@ -163,25 +166,25 @@ void playSample(byte step, byte beat, byte pointer,
       digitalWrite(led, LOW);
   }
 }
-/*
-void readSwitches(Sample <NUM_CELLS, AUDIO_RATE> *sound, 
-                  Sample <NUM_CELLS, AUDIO_RATE> &sample1,
-                  Sample <NUM_CELLS, AUDIO_RATE> &sample2,
-                  Sample <NUM_CELLS, AUDIO_RATE> &sample3,
-                  int switch1, int switch2, int sampleId) {
-    if (digitalRead(switch1) == LOW) {
-      sound = &sample1;
-      sampleId = 2;
-    } else if (digitalRead(switch2) == LOW) {
-      sound = &sample2;
-      sampleId = 1;
-    } else {
-      sound = &sample3;
-      sampleId = 0;
-    }
+
+void readSwitches(Sample <NUM_CELLS, AUDIO_RATE> **sound, 
+                  Sample <NUM_CELLS, AUDIO_RATE> *sample1,
+                  Sample <NUM_CELLS, AUDIO_RATE> *sample2,
+                  Sample <NUM_CELLS, AUDIO_RATE> *sample3,
+                  uint8_t switch1, uint8_t switch2, uint8_t *sampleId) {
+  if (digitalRead(switch1) == LOW) {
+    *sound = sample1;
+    *sampleId = 2;
+  } else if (digitalRead(switch2) == LOW) {
+    *sound = sample2;
+    *sampleId = 1;
+  } else {
+    *sound = sample3;
+    *sampleId = 0;
+  }
 }
-*/
-float setPitch(int oldPitch) {
+
+float setPitch(unsigned int oldPitch) {
   return { (recorded_pitch * (float) oldPitch / 512.f) + 0.1f };
 }
 
@@ -210,15 +213,12 @@ void sendData() {
   }
 }
 
-unsigned int millisTo_BPM_ToMillis(unsigned int value) {
-  unsigned int calc = 60000 / value;
-  return calc;
+unsigned int millisTo_BPM_ToMillis(unsigned short int value) {
+  return {  60000 / value };
 }
 
 void updateControl() {
-  readOnSwitch = digitalRead(onSwitch);
-
-  if (swingStep > MAX_STEPS) swingStep = 1;
+  pan = kPan.next()>>16;
 
   /////////////////////////////
   // Potentiometer readings //
@@ -228,7 +228,7 @@ void updateControl() {
   unsigned int swingRead = mozziAnalogRead(swingPot);
   unsigned int reverbRead = mozziAnalogRead(reverbPot);
   volume =  map(volumeRead, 0, 1023, 0, 255);
-  tempo = map(tempoRead, 0, 1023, 214, 1000); // 214 - 1000 milliseconds gives a range of 50 - 280 BPM at 1/4 notes
+  tempo = map(tempoRead, 0, 1023, 214, 1000); // 214 - 1000 milliseconds gives a range of 60 - 280 BPM at 1/4 notes
   swing = map(swingRead, 0, 1023, 0, 75);
   reverbSet = map(reverbRead, 0, 1023, 3, 0);
 
@@ -237,75 +237,36 @@ void updateControl() {
   unsigned int pitchReadC = mozziAnalogRead(pitchPotC);
   unsigned int pitchReadD = mozziAnalogRead(pitchPotD); 
 
-  byte stepA = (byte) map(mozziAnalogRead(stepPotA), 0, 1023, 1, MAX_STEPS);
-  byte stepB = (byte) map(mozziAnalogRead(stepPotB), 0, 1023, 1, MAX_STEPS);
-  byte stepC = (byte) map(mozziAnalogRead(stepPotC), 0, 1023, 1, MAX_STEPS);
-  byte stepD = (byte) map(mozziAnalogRead(stepPotD), 0, 1023, 1, MAX_STEPS);
+  uint8_t stepA = (uint8_t) map(mozziAnalogRead(stepPotA), 0, 1023, 1, MAX_STEPS);
+  uint8_t stepB = (uint8_t) map(mozziAnalogRead(stepPotB), 0, 1023, 1, MAX_STEPS);
+  uint8_t stepC = (uint8_t) map(mozziAnalogRead(stepPotC), 0, 1023, 1, MAX_STEPS);
+  uint8_t stepD = (uint8_t) map(mozziAnalogRead(stepPotD), 0, 1023, 1, MAX_STEPS);
 
-  byte beatA = (byte) map(mozziAnalogRead(beatPotA), 0, 1023, 0, stepA);
-  byte beatB = (byte) map(mozziAnalogRead(beatPotB), 0, 1023, 0, stepB);
-  byte beatC = (byte) map(mozziAnalogRead(beatPotC), 0, 1023, 0, stepC);
-  byte beatD = (byte) map(mozziAnalogRead(beatPotD), 0, 1023, 0, stepD);
+  uint8_t beatA = (uint8_t) map(mozziAnalogRead(beatPotA), 0, 1023, 0, stepA);
+  uint8_t beatB = (uint8_t) map(mozziAnalogRead(beatPotB), 0, 1023, 0, stepB);
+  uint8_t beatC = (uint8_t) map(mozziAnalogRead(beatPotC), 0, 1023, 0, stepC);
+  uint8_t beatD = (uint8_t) map(mozziAnalogRead(beatPotD), 0, 1023, 0, stepD);
 
   tempo = millisTo_BPM_ToMillis(tempo);
   printTempo = tempo;
+
+  if (swingStep > MAX_STEPS) swingStep = 1;
   
   if (swingStep % 2 == 0) {
-    tempo = tempo - swing;
+    tempo -= swing;
   } else {
-    tempo = tempo + swing;
-  }
-  if (digitalRead(3) == LOW) {
-    soundA = &aHatBongo;
-    sampleIdA = 2;
-  } else if (digitalRead(4) == LOW) {
-    soundA = &aBongo;
-    sampleIdA = 1;
-  } else {
-    soundA = &aKick;
-    sampleIdA = 0;
+    tempo += swing;
   }
 
-  if (digitalRead(5) == LOW) {
-    soundB = &aConga;
-    sampleIdB = 2;
-  } else if (digitalRead(6) == LOW) {
-    soundB = &aRim;
-    sampleIdB = 1;
-  } else {
-    soundB = &aSnare;
-    sampleIdB = 0;
-  }
-
-  if (digitalRead(7) == LOW) {
-    soundC = &aCymbal;
-    sampleIdC = 2;
-  } else if (digitalRead(8) == LOW) {
-    soundC = &aPercHat;
-    sampleIdC = 1;
-  } else {
-    soundC = &aHiHat;
-    sampleIdC = 0;
-  } 
-
-  if (digitalRead(40) == LOW) {
-    soundD = &aTambourine;
-    sampleIdD = 2;
-  } else if (digitalRead(42) == LOW) {
-    soundD = &aCowbell;
-    sampleIdD = 1;
-  } else {
-    soundD = &aClap;
-    sampleIdD = 0;
-  }
-  /*
-  readSwitches(soundA, aHatBongo, aBongo, aKick, 3, 4, sampleIdA);
-  readSwitches(soundB, aConga, aRim, aSnare, 5, 6, sampleIdB);
-  readSwitches(soundC, aCymbal, aPercHat, aHiHat, 7, 8, sampleIdC);
-  readSwitches(soundD, aTambourine, aCowbell, aClap, 40, 42, sampleIdD);
-  */
+  // Set what sample gets played on given channel according to switch readings
+  readSwitches(&soundA, &aHatBongo, &aBongo, &aKick, 3, 4, &sampleIdA);
+  readSwitches(&soundB, &aConga, &aRim, &aSnare, 5, 6, &sampleIdB);
+  readSwitches(&soundC, &aCymbal, &aPercHat, &aHiHat, 7, 8, &sampleIdC);
+  readSwitches(&soundD, &aTambourine, &aCowbell, &aClap, 40, 42, &sampleIdD);
 
   sendData();
+
+  readOnSwitch = digitalRead(onSwitch);
 
    // If switch not at ON position, stop playback, turn leds off
   if (readOnSwitch == 0) {
@@ -316,9 +277,9 @@ void updateControl() {
     return;
   }
 
-  const int arraySize = 4;
-  char pointers[arraySize] = { pointerA, pointerB, pointerC, pointerD };
-  char steps[arraySize] = { stepA, stepB, stepC, stepD };
+  const uint8_t arraySize = 4;
+  uint8_t pointers[arraySize] = { pointerA, pointerB, pointerC, pointerD };
+  uint8_t steps[arraySize] = { stepA, stepB, stepC, stepD };
 
   if(kTriggerDelay.ready()) {
     for (int i = 0; i < arraySize; i++) {
@@ -342,12 +303,16 @@ void updateControl() {
   }
 }
 
+//int audio_out_1, audio_out_2;
+
 int updateAudio() {
   int gain = (int)
     ( (long)((*soundA).next() * volume) +
             ((*soundB).next() * volume) +
             ((*soundC).next() * volume) +
-            ((*soundD).next() * volume) ) >> 8; // try >> 8
+            ((*soundD).next() * volume) ) >> 8;
+
+
 
   int arev = reverb.next(gain);
 
