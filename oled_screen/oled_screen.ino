@@ -122,7 +122,7 @@ void draw() {
   oled.println(arrD[idD]);
   oled.display();
 
-  if (buttonState == 1) {
+  if (buttonState == 0) {
     oled.fillRect(8, 19, 19, 19, BLACK); // So the icons don't overlap when chaging play states
     oled.drawBitmap(8, 18, playIcon, 19, 18, WHITE);
     oled.display();
