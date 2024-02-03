@@ -81,14 +81,12 @@ EventDelay kTriggerDelay; // Schedules sampels to start
 EventDelay delayTx; // So serial receiver device doesn't get flooded with data
 ReverbTank reverb;
 
+
 uint8_t readOnSwitch;
 bool tapState = false;
-bool transmit = true;
 unsigned short int tempoOrig;
 unsigned short int oldTempo;
 unsigned short int newTempo;
-unsigned short int minTempo = 500; 
-unsigned short int maxTempo = 107;
 
 uint8_t volume;
 uint8_t reverbSet;
@@ -190,7 +188,7 @@ float setPitch(unsigned int oldPitch) {
 }
 
 void sendData() { 
-  if (delayTx.ready() && transmit == true) {
+  if (delayTx.ready()) {
     Serial.print('[');
     Serial.print(readOnSwitch);
     Serial.print(",");
@@ -227,6 +225,8 @@ unsigned long tapLengths[maxTapValues];
 int tapIndex = 0;
 int tapCount = 0;
 bool lastTapSkipped = false;
+unsigned short int minTempo = 1000; 
+unsigned short int maxTempo = 214;
 
 void tapTempoStart() {
   unsigned long timer = millis();
@@ -251,12 +251,11 @@ void calculateTaps(unsigned long timer) {
   tapCount++;
   if(tapCount == 1) {
     tapState = false;
-    transmit = true;
     return;
   }
 
   if(tapCount > 2 && !lastTapSkipped
-      && duration > beatLengts * 1.75
+      && duration > beatLength * 1.75
       && duration < beatLength * 2.75) {
     duration = duration >> 1;
     lastTapSkipped = true;
@@ -272,8 +271,7 @@ void calculateTaps(unsigned long timer) {
   }
 
   beatLength = getTapAverage();
-  newTempo = millisTo_BPM_ToMillis(beatLength);
-  transmit = true;
+  newTempo = millisTo_BPM_ToMillis(beatLength) << 1;
 }
 
 unsigned short int getTapAverage() {
@@ -308,7 +306,7 @@ void updateControl() {
   unsigned int tempoRead = mozziAnalogRead(tempoPot);
   unsigned int swingRead = mozziAnalogRead(swingPot);
   unsigned int reverbRead = mozziAnalogRead(reverbPot);
-  tempoOrig = map(tempoRead, 0, 1023, maxTempo, minTempo); // 107 - 500 milliseconds gives a range of 60 - 280 BPM at 1/4 notes
+  tempoOrig = map(tempoRead, 0, 1023, 107, 500); // 107 - 500 milliseconds gives a range of 60 - 280 BPM at 1/4 notes
   uint8_t swing = map(swingRead, 0, 1023, 0, 84);
   reverbSet = map(reverbRead, 0, 1023, 4, 0);
   volume =  map(volumeRead, 0, 1023, 0, 255);
@@ -333,7 +331,6 @@ void updateControl() {
 
   if (tapRead == LOW) { // if tap tempo button is pressed
     tapState = true;
-    transmit = false;
     oldTempo = tempoOrig;
   }
 
@@ -346,7 +343,6 @@ void updateControl() {
   uint8_t tapCalc = abs(tempoOrig - oldTempo); // If tempo pot change is more than 3 read that instead of tap tempo
   if (tapCalc > 3) {
     tapState = false;
-    transmit = true;
   }
 
   printTempo = newTempo >> 1;

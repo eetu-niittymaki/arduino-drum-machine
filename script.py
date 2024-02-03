@@ -44,8 +44,8 @@ def raw_to_h(infile, tablename):
 
     audio_array = array('B', raw_data)
     tablename = tablename.split("\\")[::-1][0].replace(" ", "_")
-
     output_file_name = os.path.splitext(infile)[0] + ".h"
+    
     with open(output_file_name, 'w') as output:
         output.write(f"#ifndef {tablename}_H_\n")
         output.write(f"#define {tablename}_H_\n\n")
@@ -73,10 +73,11 @@ def to_raw(file):
             data = read.readframes(int(sample_count))
         else:
             data = read.readframes(frames)
-    
+
     with wave.open(file, "w") as write:
         write.setnchannels(channels)
         write.setsampwidth(sampwidth)
+        
         write.setframerate(framerate)
         write.writeframes(data)
 
