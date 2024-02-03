@@ -62,14 +62,14 @@ def raw_to_h(infile, tablename):
         output.write("};\n\n")
         output.write(f"#endif /* {tablename}_H_ */")
        
-def format(file):
+def to_raw(file):
     with wave.open(file, "r") as read:
         frames = read.getnframes()
         sampwidth = read.getsampwidth()
         framerate = read.getframerate()
         channels = read.getnchannels()
 
-        if frames > int(sample_count):   # if wav files sample count is > 2048: read and write the first 2048 samples, else write all of them
+        if frames > int(sample_count):
             data = read.readframes(int(sample_count))
         else:
             data = read.readframes(frames)
@@ -136,4 +136,4 @@ if __name__ == "__main__":
             sound = AudioSegment.from_wav(file)
             sound = sound.set_channels(1) # Downsamples file to mono
             sound.export(file, format="wav")
-            format(file)
+            to_raw(file)

@@ -16,7 +16,7 @@
 #include "samples/cowbell.h" 
 #include "samples/tambourine.h" 
 
-#define NUM_CELLS 2048 // Make sure this is the same as in .h wavetable files
+#define NUM_CELLS 4096 // Make sure this is the same as in .h wavetable files
 #define SAMPLERATE 32768 //16384
 #define CONTROL_RATE 256
 
@@ -83,13 +83,16 @@ ReverbTank reverb;
 
 uint8_t readOnSwitch;
 bool tapState = false;
-unsigned short int tempo;
+bool transmit = true;
+unsigned short int tempoOrig;
 unsigned short int oldTempo;
 unsigned short int newTempo;
+unsigned short int minTempo = 500; 
+unsigned short int maxTempo = 107;
 
 uint8_t volume;
 uint8_t reverbSet;
-const int recorded_pitch = SAMPLERATE / NUM_CELLS;
+const short int recorded_pitch = SAMPLERATE / NUM_CELLS;
 uint8_t swingStep = 1;
 
 uint8_t pointerA = 0;
@@ -158,10 +161,10 @@ bool startPlayback(uint8_t stepCount, uint8_t beatCount, uint8_t pointer) {
 void playSound(uint8_t step, uint8_t beat, uint8_t pointer, 
                 Sample <NUM_CELLS, AUDIO_RATE> *sound, unsigned int pitch, uint8_t led) {
   if(startPlayback(step, beat, pointer)) {
-      (*sound).start();
-      (*sound).setFreq(setPitch(pitch));
-      digitalWrite(led, HIGH);
-      digitalWrite(led, LOW);
+    (*sound).start();
+    (*sound).setFreq(setPitch(pitch));
+    digitalWrite(led, HIGH);
+    digitalWrite(led, LOW);
   }
 }
 
@@ -187,7 +190,7 @@ float setPitch(unsigned int oldPitch) {
 }
 
 void sendData() { 
-  if (delayTx.ready()) {
+  if (delayTx.ready() && transmit == true) {
     Serial.print('[');
     Serial.print(readOnSwitch);
     Serial.print(",");
@@ -215,75 +218,88 @@ unsigned int millisTo_BPM_ToMillis(unsigned short int value) {
   return {  60000 / value };
 }
 
-uint8_t buttonState;    
-uint8_t lastButtonState = 1;
-int tapBeat;
+bool lastButtonReading = false;
+unsigned long beatLength = 500;
+unsigned long lastTapMs = 0;
+int beatsUntilReset = 3;
+const int maxTapValues = 8;
+unsigned long tapLengths[maxTapValues];
+int tapIndex = 0;
+int tapCount = 0;
+bool lastTapSkipped = false;
 
-unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
-unsigned long debounceDelay = 50; 
-
-unsigned long last_debounce_millis = 0;
-const uint8_t taps_len = 24;
-unsigned long taps_millis[taps_len];
-uint8_t next_tap = 0;
-uint8_t total_taps = 0;
-
-void tapTempo() {
-  unsigned long total = 0;
-  uint8_t reading = digitalRead(tempoButton);
+void tapTempoStart() {
+  unsigned long timer = millis();
+  bool buttonDown = digitalRead(tempoButton) == LOW;
   
-  if (reading != lastButtonState) {
-    lastDebounceTime = millis();
+  if (buttonDown && !lastButtonReading) { // Check if button has been pressed again
+    calculateTaps(timer);
   }
 
-  if ((millis() - lastDebounceTime) > debounceDelay) {
-    if (reading != buttonState) {
-      buttonState = reading;
-      if((millis() - last_debounce_millis) > 2000) {
-        reset_taps();
-      }
-
-      taps_millis[next_tap] = millis();
-      if (buttonState == LOW) {
-        tapBeat = calculateTaps();
-        next_tap = ++next_tap % taps_len;
-        total_taps++;
-        last_debounce_millis = millis();
-      }
-    }
-  }
-  
-  lastButtonState = reading;
-  newTempo = tapBeat;
+  lastButtonReading = buttonDown;
 }
 
-int calculateTaps() {
-  if(total_taps < 4) {
-    return 0;
+void calculateTaps(unsigned long timer) {
+  unsigned long duration = timer - lastTapMs;
+  unsigned short int timeMin = lastTapMs + minTempo;
+  unsigned short int timeNext = lastTapMs + (beatLength * beatsUntilReset);
+  if (timeMin < timer && timeNext < timer) {
+    resetTaps(timer);
   }
-  
-  unsigned long total = 0;
-  for(int i = 1; i <= 4; i++) {
-    int tap = next_tap - i;
-    
-    if(tap < 0) {
-      tap = taps_len + tap;
-    }
-    if(i > 1) {
-      total += (taps_millis[tap + 1 % taps_len] - taps_millis[tap]);
-    }
+
+  lastTapMs = timer;
+  tapCount++;
+  if(tapCount == 1) {
+    tapState = false;
+    transmit = true;
+    return;
   }
-  return 60000/(total / 3);
+
+  if(tapCount > 2 && !lastTapSkipped
+      && duration > beatLengts * 1.75
+      && duration < beatLength * 2.75) {
+    duration = duration >> 1;
+    lastTapSkipped = true;
+  } else {
+    lastTapSkipped = false;
+  }
+
+  tapLengths[tapIndex] = duration;
+  tapIndex++;
+
+  if(tapIndex == maxTapValues) {
+    tapIndex = 0;
+  }
+
+  beatLength = getTapAverage();
+  newTempo = millisTo_BPM_ToMillis(beatLength);
+  transmit = true;
 }
 
-void reset_taps() {
-  for(int i = 0; i < taps_len;i++) {
-    taps_millis[i] = 0;
+unsigned short int getTapAverage() {
+  int amount = tapCount - 1;
+  if(amount > maxTapValues) {
+    amount = maxTapValues;
   }
-  next_tap = 0;
-  total_taps = 0;
+
+  unsigned short int tapTotalMs = 0;
+  for(int i = 0; i < amount; i++) {
+    tapTotalMs += tapLengths[i];
+  }
+  unsigned short int tapAverageMs = tapTotalMs / amount;
+  if(tapAverageMs < maxTempo) {
+    return maxTempo;
+  }
+  return tapAverageMs;
 }
 
+void resetTaps(unsigned long timer) {
+  tapCount = 0;
+  tapIndex = 0;
+  for(int i = 0; i < maxTapValues; i++) {
+    tapLengths[i] = 0;
+  }
+}
 void updateControl() {
   /////////////////////////////
   // Potentiometer readings //
@@ -292,9 +308,9 @@ void updateControl() {
   unsigned int tempoRead = mozziAnalogRead(tempoPot);
   unsigned int swingRead = mozziAnalogRead(swingPot);
   unsigned int reverbRead = mozziAnalogRead(reverbPot);
-  tempo = map(tempoRead, 0, 1023, 214, 1000); // 214 - 1000 milliseconds gives a range of 60 - 280 BPM at 1/4 notes
+  tempoOrig = map(tempoRead, 0, 1023, maxTempo, minTempo); // 107 - 500 milliseconds gives a range of 60 - 280 BPM at 1/4 notes
   uint8_t swing = map(swingRead, 0, 1023, 0, 84);
-  reverbSet = map(reverbRead, 0, 1023, 3, 0);
+  reverbSet = map(reverbRead, 0, 1023, 4, 0);
   volume =  map(volumeRead, 0, 1023, 0, 255);
 
   unsigned int pitchReadA = mozziAnalogRead(pitchPotA);
@@ -313,25 +329,27 @@ void updateControl() {
   uint8_t beatD = (uint8_t) map(mozziAnalogRead(beatPotD), 0, 1023, 0, stepD);
 
   uint8_t tapRead = digitalRead(tempoButton);
-  tempo = millisTo_BPM_ToMillis(tempo);
+  tempoOrig = millisTo_BPM_ToMillis(tempoOrig);
 
   if (tapRead == LOW) { // if tap tempo button is pressed
     tapState = true;
-    oldTempo = tempo;
+    transmit = false;
+    oldTempo = tempoOrig;
   }
 
   if (tapState == false) {
-    newTempo = tempo;
+    newTempo = tempoOrig;
   } else {
-    tapTempo();
+    tapTempoStart();
   }
 
-  uint8_t tapCalc = abs(tempo - oldTempo); // If tempo pot change is more than 3 read that instead of tap tempo
+  uint8_t tapCalc = abs(tempoOrig - oldTempo); // If tempo pot change is more than 3 read that instead of tap tempo
   if (tapCalc > 3) {
     tapState = false;
+    transmit = true;
   }
 
-  printTempo = newTempo;
+  printTempo = newTempo >> 1;
 
   if (swingStep > MAX_STEPS) swingStep = 1;
   
@@ -353,6 +371,10 @@ void updateControl() {
 
    // If switch not at ON position stop playback
   if (readOnSwitch == HIGH) {
+    digitalWrite(ledA, LOW);
+    digitalWrite(ledB, LOW);
+    digitalWrite(ledC, LOW);
+    digitalWrite(ledD, LOW);
     return;
   }
 
@@ -387,7 +409,7 @@ AudioOutput_t updateAudio() {
     ( (long)((*soundA).next() * volume) +
             ((*soundB).next() * volume) +
             ((*soundC).next() * volume) +
-            ((*soundD).next() * volume) ) >> 8;
+            ((*soundD).next() * volume) ) >> 8; //8
 
   // Mozzi default output range is -244 to 243
   if (gain > 243) {
@@ -398,7 +420,7 @@ AudioOutput_t updateAudio() {
 
   int arev = reverb.next(gain);
 
-  if (reverbSet == 3) {
+  if (reverbSet == 4) {
     return MonoOutput::from8Bit(gain);
   } else {
     return MonoOutput::from8Bit(gain + (arev >> reverbSet));
