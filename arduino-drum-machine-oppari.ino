@@ -2,6 +2,7 @@
 #include <Sample.h>
 #include <EventDelay.h>
 #include <ReverbTank.h>
+#include "Utilities.h"
 
 #include "samples/bongo.h" 
 #include "samples/conga.h" 
@@ -80,7 +81,7 @@ Sample <NUM_CELLS, AUDIO_RATE> *soundD = &aClap;
 EventDelay kTriggerDelay; // Schedules sampels to start
 EventDelay delayTx; // So serial receiver device doesn't get flooded with data
 ReverbTank reverb;
-
+Utilities utility;
 
 uint8_t readOnSwitch;
 bool tapState = false;
@@ -90,7 +91,7 @@ unsigned short int newTempo;
 
 uint8_t volume;
 uint8_t reverbSet;
-const short int recorded_pitch = SAMPLERATE / NUM_CELLS;
+const unsigned short int recorded_pitch = SAMPLERATE / NUM_CELLS;
 uint8_t swingStep = 1;
 
 uint8_t pointerA = 0;
@@ -160,7 +161,7 @@ void playSound(uint8_t step, uint8_t beat, uint8_t pointer,
                 Sample <NUM_CELLS, AUDIO_RATE> *sound, unsigned int pitch, uint8_t led) {
   if(startPlayback(step, beat, pointer)) {
     (*sound).start();
-    (*sound).setFreq(setPitch(pitch));
+    (*sound).setFreq(utility.setPitch(pitch, recorded_pitch));
     digitalWrite(led, HIGH);
     digitalWrite(led, LOW);
   }
@@ -181,10 +182,6 @@ void readSwitches(Sample <NUM_CELLS, AUDIO_RATE> **sound,
     *sound = sample3;
     *sampleId = 0;
   }
-}
-
-float setPitch(unsigned int oldPitch) {
-  return { (recorded_pitch * (float) oldPitch / 512.f) + 0.1f };
 }
 
 void sendData() { 
@@ -210,10 +207,6 @@ void sendData() {
     Serial.print(']');
     Serial.println();
   }
-}
-
-unsigned int millisTo_BPM_ToMillis(unsigned short int value) {
-  return {  60000 / value };
 }
 
 bool lastButtonReading = false;
@@ -271,7 +264,7 @@ void calculateTaps(unsigned long timer) {
   }
 
   beatLength = getTapAverage();
-  newTempo = millisTo_BPM_ToMillis(beatLength) << 1;
+  newTempo = utility.millisTo_BPM_ToMillis(beatLength) << 1;
 }
 
 unsigned short int getTapAverage() {
@@ -298,6 +291,7 @@ void resetTaps(unsigned long timer) {
     tapLengths[i] = 0;
   }
 }
+
 void updateControl() {
   /////////////////////////////
   // Potentiometer readings //
@@ -307,7 +301,7 @@ void updateControl() {
   unsigned int swingRead = mozziAnalogRead(swingPot);
   unsigned int reverbRead = mozziAnalogRead(reverbPot);
   tempoOrig = map(tempoRead, 0, 1023, 107, 500); // 107 - 500 milliseconds gives a range of 60 - 280 BPM at 1/4 notes
-  uint8_t swing = map(swingRead, 0, 1023, 0, 84);
+  float swing = utility.mapf(swingRead, 0, 1023, 1.00, 1.70); // 70 % upper range, same as in the Linn LM-1 drum machine
   reverbSet = map(reverbRead, 0, 1023, 4, 0);
   volume =  map(volumeRead, 0, 1023, 0, 255);
 
@@ -327,7 +321,7 @@ void updateControl() {
   uint8_t beatD = (uint8_t) map(mozziAnalogRead(beatPotD), 0, 1023, 0, stepD);
 
   uint8_t tapRead = digitalRead(tempoButton);
-  tempoOrig = millisTo_BPM_ToMillis(tempoOrig);
+  tempoOrig = utility.millisTo_BPM_ToMillis(tempoOrig);
 
   if (tapRead == LOW) { // if tap tempo button is pressed
     tapState = true;
@@ -350,9 +344,9 @@ void updateControl() {
   if (swingStep > MAX_STEPS) swingStep = 1;
   
   if (swingStep % 2 == 0) {
-    newTempo = newTempo - swing;
+    newTempo = newTempo / swing;
   } else {
-    newTempo = newTempo + swing;
+    newTempo = newTempo * swing;
   }
 
   // Set what sample gets played on given channel according to switch readings, set sample index for oled_screen.ino
@@ -396,7 +390,7 @@ void updateControl() {
     pointerD++;
     swingStep++;
 
-    kTriggerDelay.start(millisTo_BPM_ToMillis(newTempo));
+    kTriggerDelay.start(utility.millisTo_BPM_ToMillis(newTempo));
   }
 }
 
