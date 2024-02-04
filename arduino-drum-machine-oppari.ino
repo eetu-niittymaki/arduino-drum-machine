@@ -148,18 +148,9 @@ void setup() {
   delayTx.set(350); 
 }
 
-bool startPlayback(uint8_t stepCount, uint8_t beatCount, uint8_t pointer) {
-  float divider = ((float)beatCount / (float)stepCount);
-  bool start;
-  uint8_t count = pointer * divider;
-  uint8_t prevCount = (pointer - 1) * divider;
-
-  return { (pointer == 0) ? start = (beatCount != 0) : start = (count > prevCount) };
-}
-
 void playSound(uint8_t step, uint8_t beat, uint8_t pointer, 
                 Sample <NUM_CELLS, AUDIO_RATE> *sound, unsigned int pitch, uint8_t led) {
-  if(startPlayback(step, beat, pointer)) {
+  if(utility.startPlayback(step, beat, pointer)) {
     (*sound).start();
     (*sound).setFreq(utility.setPitch(pitch, recorded_pitch));
     digitalWrite(led, HIGH);
