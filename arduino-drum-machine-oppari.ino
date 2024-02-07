@@ -203,7 +203,7 @@ void sendData() {
 bool lastButtonReading = false;
 unsigned long beatLength = 500;
 unsigned long lastTapMs = 0;
-int beatsUntilReset = 3;
+int beatsUntilReset = 10;
 const int maxTapValues = 8;
 unsigned long tapLengths[maxTapValues];
 int tapIndex = 0;
@@ -287,14 +287,10 @@ void updateControl() {
   /////////////////////////////
   // Potentiometer readings //
   ///////////////////////////
-  unsigned int volumeRead = mozziAnalogRead(volumePot);
-  unsigned int tempoRead = mozziAnalogRead(tempoPot);
-  unsigned int swingRead = mozziAnalogRead(swingPot);
-  unsigned int reverbRead = mozziAnalogRead(reverbPot);
-  tempoOrig = map(tempoRead, 0, 1023, 107, 500); // 107 - 500 milliseconds gives a range of 60 - 280 BPM at 1/4 notes
-  float swing = utility.mapf(swingRead, 0, 1023, 1.00, 1.70); // 70 % upper range, same as in the Linn LM-1 drum machine
-  reverbSet = map(reverbRead, 0, 1023, 4, 0);
-  volume =  map(volumeRead, 0, 1023, 0, 255);
+  tempoOrig = map(mozziAnalogRead(tempoPot), 0, 1023, 107, 500); // 107 - 500 milliseconds gives a range of 60 - 280 BPM at 1/4 notes
+  float swing = utility.mapf(mozziAnalogRead(swingPot), 0, 1023, 1.00, 1.70); // 70 % upper range, same as in the Linn LM-1 drum machine
+  reverbSet = map(mozziAnalogRead(reverbPot), 0, 1023, 4, 0);
+  volume =  map(mozziAnalogRead(volumePot), 0, 1023, 0, 255);
 
   unsigned int pitchReadA = mozziAnalogRead(pitchPotA);
   unsigned int pitchReadB = mozziAnalogRead(pitchPotB);
