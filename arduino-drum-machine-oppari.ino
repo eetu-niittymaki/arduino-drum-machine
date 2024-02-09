@@ -388,11 +388,11 @@ AudioOutput_t updateAudio() {
             ((*soundC).next() * volume) +
             ((*soundD).next() * volume) ) >> 8; //8
 
-  // Mozzi default output range is -244 to 243
-  if (gain > 243) {
-    gain = 243;
-  } else if (gain < -244) {
-    gain = -244; 
+  // Mozzi default output range is -244 to 243 in STANDARD mode or -8192 to 8191 in HIFI mode
+  if (gain > 8191) {
+    gain = 8191;
+  } else if (gain < -8192) {
+    gain = -8192; 
   }
 
   int arev = reverb.next(gain);
