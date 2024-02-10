@@ -12,12 +12,19 @@ const byte numChars = 32;
 char receivedChars[numChars];
 char tempChars[numChars];   
 
-int buttonState;
-int tempo;
-int idA;
-int idB;
-int idC;
-int idD;
+uint8_t buttonState;
+uint8_t tempo;
+uint8_t idA;
+uint8_t idB;
+uint8_t idC;
+uint8_t idD;
+
+uint8_t oldOledState;
+uint8_t oledState = 0;
+uint8_t stepsA;
+uint8_t stepsB;
+uint8_t stepsC;
+uint8_t stepsD;
 
 boolean newData = false;
 
@@ -41,11 +48,14 @@ char *arrC[3] = { "Hihat  ", "PercHat", "Cymbal " };
 char *arrD[3] = { "Clap   ", "Cowbell", "Tamb   " };
 
 void parseData() {
-    char * strtokIindex; 
+  char * strtokIindex; 
+  if (oledState == 0) {
+    strtokIindex = strtok(tempChars, ",");
+    oledState = atoi(strtokIindex);
 
-    strtokIindex = strtok(tempChars, ",");  // This is correct, don't change     
-    buttonState = atoi(strtokIindex); // 
- 
+    strtokIindex = strtok(NULL, ",");    
+    buttonState = atoi(strtokIindex);
+
     strtokIindex = strtok(NULL, ","); 
     tempo = atoi(strtokIindex);     
     
@@ -60,6 +70,22 @@ void parseData() {
 
     strtokIindex = strtok(NULL, ",");
     idD = atoi(strtokIindex);
+  } else {
+    strtokIindex = strtok(tempChars, ",");
+    oledState = atoi(strtokIindex);
+
+    strtokIindex = strtok(NULL, ",");
+    stepsA = atoi(strtokIindex);
+
+    strtokIindex = strtok(NULL, ",");
+    stepsB = atoi(strtokIindex);
+
+    strtokIindex = strtok(NULL, ",");
+    stepsC = atoi(strtokIindex);
+
+    strtokIindex = strtok(NULL, ",");
+    stepsD = atoi(strtokIindex);
+  }
 }
 
 void showParsedData() {
@@ -99,7 +125,7 @@ void recvWithStartEndMarkers() {
     }
 }
 
-void draw() {
+void drawPlayScreen() {
   oled.setTextSize(1);
 
   oled.setCursor(5, 0);
@@ -139,6 +165,38 @@ void draw() {
   oled.display();
 }
 
+void drawSetSteps() {
+  oled.setTextSize(2);
+
+  oled.setCursor(5, 0);
+  oled.print("A:");
+  oled.print(stepsA);
+  oled.println(" ");
+  oled.display();
+  
+  oled.setCursor(67, 0);
+  oled.print("B:");
+  oled.print(stepsB);
+  oled.println(" ");
+  oled.display();
+  
+  oled.setCursor(5, 50);
+  oled.print("C:");
+  oled.print(stepsC);
+  oled.println(" ");
+  oled.display();
+  
+  oled.setCursor(67, 50);
+  oled.print("D:");
+  oled.print(stepsD);
+  oled.println(" ");
+  oled.display();
+
+  oled.setCursor(30, 25);
+  oled.print("STEPS");
+  oled.display();
+}
+
 void setup() {
   Serial.begin(9600);
   // initialize OLED display with address 0x3C for 128x64
@@ -149,7 +207,7 @@ void setup() {
   //delay(1000);
   oled.clearDisplay();
   oled.setTextColor(WHITE, BLACK);
-  oled.setTextSize(2);
+  oldOledState = oledState;
 }
 
 void loop() {
@@ -159,8 +217,17 @@ void loop() {
             // this temporary copy is necessary to protect the original data
             //   because strtok() used in parseData() replaces the commas with \0
     parseData();
-    showParsedData();
+    //showParsedData();
     newData = false;
   }
-  draw();
+  if (oledState == 0) {
+    drawPlayScreen();
+  } else {
+    drawSetSteps();
+  }
+
+  if (oldOledState != oledState) { // Clear screen at state change
+    oled.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, BLACK);
+  }
+  oldOledState = oledState;
 }

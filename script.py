@@ -13,6 +13,7 @@ import wave
 from tkinter import *
 from tkinter import filedialog
 from tkinter import ttk
+from tkinter import messagebox as msg 
 
 sample_count = None
 samplerate = None
@@ -49,7 +50,7 @@ def write_to_file(file):
                 run = False
                 break
             else:
-                print("ffmpeg.exe not found!")
+                msg.showerror("Error!", "ffmepg.exe not in directory!")
 
 def locate_ffmpeg():
     global ffmpeg_exe
@@ -119,7 +120,7 @@ def to_raw(file):
 
 def set_path():
     global path
-    path = filedialog.askdirectory()
+    path = filedialog.askdirectory(title="Select Folder With .wav Samples")
     if path:
         root.destroy()
     else:
