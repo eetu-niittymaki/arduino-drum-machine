@@ -4,18 +4,18 @@
 #include <ReverbTank.h>
 #include "Utilities.h"
 
-#include "samples/bongo.h" 
-#include "samples/conga.h" 
-#include "samples/cymbal.h" 
+#include "samples/bongo.h"
+#include "samples/conga.h"
+#include "samples/cymbal.h"
 #include "samples/hihat.h"
-#include "samples/kick.h" 
-#include "samples/snare.h" 
-#include "samples/rim.h" 
-#include "samples/perc_hat.h" 
-#include "samples/hat_bongo.h" 
-#include "samples/clap.h" 
-#include "samples/cowbell.h" 
-#include "samples/tambourine.h" 
+#include "samples/kick.h"
+#include "samples/snare.h"
+#include "samples/rim.h"
+#include "samples/perc_hat.h"
+#include "samples/hat_bongo.h"
+#include "samples/clap.h"
+#include "samples/cowbell.h"
+#include "samples/tambourine.h"
 
 #define NUM_CELLS 4096 // Make sure this is the same as in .h wavetable files
 #define SAMPLERATE 32768 //16384
@@ -39,19 +39,23 @@
 #define stepPotC 7
 #define stepPotD 8
 
-#define pitchPotA 12
-#define pitchPotB 13
-#define pitchPotC 14 
-#define pitchPotD 15
+#define auxPotA 12
+#define auxPotB 13
+#define auxPotC 14
+#define auxPotD 15
 
 // Digital
 #define onSwitch 2
 #define tempoButton 4
+#define oledStateButton 29
+#define auxStateButton 45
 #define ledA 28
 #define ledB 12
 #define ledC 9
 #define ledD 35
-#define oledStateButton 29
+#define ledVol 47
+#define ledPitch 49
+
 
 //A
 Sample <NUM_CELLS, AUDIO_RATE>aBongo(bongo_DATA);
@@ -81,6 +85,7 @@ Sample <NUM_CELLS, AUDIO_RATE> *soundD = &aClap;
 
 EventDelay kTriggerDelay; // Schedules sampels to start
 EventDelay delayTx; // So serial receiver device doesn't get flooded with data
+EventDelay delayOled;
 ReverbTank reverb;
 Utilities utility;
 
@@ -88,6 +93,8 @@ uint8_t readOnSwitch;
 bool tapState = false;
 uint8_t oledState = 0;
 uint8_t lastOledState = 0;
+uint8_t auxState = 0;
+uint8_t lastAuxState = 0;
 unsigned short int tempoOrig;
 unsigned short int oldTempo;
 unsigned short int newTempo;
@@ -102,21 +109,52 @@ uint8_t pointerB = 0;
 uint8_t pointerC = 0;
 uint8_t pointerD = 0;
 
-uint8_t maxStepA = 16; 
+uint8_t maxStepA = 16;
 uint8_t maxStepB = 16;
-uint8_t maxStepC = 16; 
+uint8_t maxStepC = 16;
 uint8_t maxStepD = 16;
 
+uint8_t maxStepReadA;
+uint8_t maxStepReadB;
+uint8_t maxStepReadC;
+uint8_t maxStepReadD;
+
+uint8_t oldMaxStepA;
+uint8_t oldMaxStepB;
+uint8_t oldMaxStepC;
+uint8_t oldMaxStepD;
+
 unsigned short int printTempo;
-uint8_t sampleIdA; 
+uint8_t sampleIdA;
 uint8_t sampleIdB;
-uint8_t sampleIdC; 
+uint8_t sampleIdC;
 uint8_t sampleIdD;
+
+uint8_t volA = 255;
+uint8_t volB = 255;
+uint8_t volC = 255;
+uint8_t volD = 255;
+
+uint8_t oldVolA = 0;
+uint8_t oldVolB = 0;
+uint8_t oldVolC = 0;
+uint8_t oldVolD = 0;
+
+float pitchA = recorded_pitch;
+float pitchB = recorded_pitch;
+float pitchC = recorded_pitch;
+float pitchD = recorded_pitch;
+
+float oldPitchA = 0;
+float oldPitchB = 0;
+float oldPitchC = 0;
+float oldPitchD = 0;
 
 void setup() {
   pinMode(onSwitch, INPUT_PULLUP);
   pinMode(tempoButton, INPUT_PULLUP);
   pinMode(oledStateButton, INPUT_PULLUP);
+  pinMode(auxStateButton, INPUT_PULLUP);
   pinMode(41, INPUT_PULLUP); // A
   pinMode(43, INPUT_PULLUP);
   pinMode(5, INPUT_PULLUP); // B
@@ -125,39 +163,42 @@ void setup() {
   pinMode(8, INPUT_PULLUP);
   pinMode(40, INPUT_PULLUP); // D
   pinMode(42, INPUT_PULLUP);
-  //pinMode(10, OUTPUT); 
+  //pinMode(10, OUTPUT);
   //pinMode(11, OUTPUT); //9 for Nano, 11 for Mega
   pinMode(ledA, OUTPUT);
   pinMode(ledB, OUTPUT);
   pinMode(ledC, OUTPUT);
   pinMode(ledD, OUTPUT);
+  pinMode(ledVol, OUTPUT);
+  pinMode(ledPitch, OUTPUT);
 
   startMozzi(CONTROL_RATE);
 
   Serial.begin(9600);
 
-  aBongo.setFreq((float) bongo_SAMPLERATE / (float) NUM_CELLS); 
-  aHatBongo.setFreq((float) hat_bongo_SAMPLERATE / (float) NUM_CELLS); 
-  aKick.setFreq((float) kick_SAMPLERATE / (float) NUM_CELLS); 
-  
+  aBongo.setFreq((float) bongo_SAMPLERATE / (float) NUM_CELLS);
+  aHatBongo.setFreq((float) hat_bongo_SAMPLERATE / (float) NUM_CELLS);
+  aKick.setFreq((float) kick_SAMPLERATE / (float) NUM_CELLS);
+
   aConga.setFreq((float) conga_SAMPLERATE / (float) NUM_CELLS);
-  aRim.setFreq((float) rim_SAMPLERATE / (float) NUM_CELLS); 
-  aSnare.setFreq((float) snare_SAMPLERATE / (float) NUM_CELLS); 
+  aRim.setFreq((float) rim_SAMPLERATE / (float) NUM_CELLS);
+  aSnare.setFreq((float) snare_SAMPLERATE / (float) NUM_CELLS);
 
   aCymbal.setFreq((float) cymbal_SAMPLERATE / (float) NUM_CELLS);
-  aPercHat.setFreq((float) perc_hat_SAMPLERATE / (float) NUM_CELLS); 
-  aHiHat.setFreq((float) hihat_SAMPLERATE / (float) NUM_CELLS); 
+  aPercHat.setFreq((float) perc_hat_SAMPLERATE / (float) NUM_CELLS);
+  aHiHat.setFreq((float) hihat_SAMPLERATE / (float) NUM_CELLS);
 
-  aClap.setFreq((float) clap_SAMPLERATE / (float) NUM_CELLS); 
-  aTambourine.setFreq((float) tambourine_SAMPLERATE / (float) NUM_CELLS); 
-  aCowbell.setFreq((float) cowbell_SAMPLERATE / (float) NUM_CELLS); 
+  aClap.setFreq((float) clap_SAMPLERATE / (float) NUM_CELLS);
+  aTambourine.setFreq((float) tambourine_SAMPLERATE / (float) NUM_CELLS);
+  aCowbell.setFreq((float) cowbell_SAMPLERATE / (float) NUM_CELLS);
 
   kTriggerDelay.set(10);
-  delayTx.set(400); 
+  delayTx.set(350);
+  delayOled.set(8000);
 }
 
-void playSound(uint8_t step, uint8_t beat, uint8_t pointer, 
-                Sample <NUM_CELLS, AUDIO_RATE> *sound, unsigned int pitch, uint8_t led) {
+void playSound(uint8_t step, uint8_t beat, uint8_t pointer,
+                Sample <NUM_CELLS, AUDIO_RATE> *sound, float pitch, uint8_t led) {
   if(utility.startPlayback(step, beat, pointer)) {
     (*sound).start();
     (*sound).setFreq(utility.setPitch(pitch, recorded_pitch));
@@ -166,7 +207,7 @@ void playSound(uint8_t step, uint8_t beat, uint8_t pointer,
   }
 }
 
-void readSwitches(Sample <NUM_CELLS, AUDIO_RATE> **sound, 
+void readSwitches(Sample <NUM_CELLS, AUDIO_RATE> **sound,
                   Sample <NUM_CELLS, AUDIO_RATE> *sample1,
                   Sample <NUM_CELLS, AUDIO_RATE> *sample2,
                   Sample <NUM_CELLS, AUDIO_RATE> *sample3,
@@ -183,11 +224,11 @@ void readSwitches(Sample <NUM_CELLS, AUDIO_RATE> **sound,
   }
 }
 
-void sendData() { 
+void sendData() {
   if (delayTx.ready()) {
     if (oledState == 0) {
       Serial.print('[');
-      Serial.print(oledState); 
+      Serial.print(oledState);
       Serial.print(",");
       delayTx.start();
       Serial.print(readOnSwitch);
@@ -205,12 +246,12 @@ void sendData() {
       Serial.print(sampleIdC);
       Serial.print(",");
       delayTx.start();
-      Serial.print(sampleIdD); 
+      Serial.print(sampleIdD);
       Serial.print(']');
       Serial.println();
     } else {
       Serial.print('[');
-      Serial.print(oledState); 
+      Serial.print(oledState);
       Serial.print(",");
       delayTx.start();
       Serial.print(maxStepA);
@@ -238,13 +279,13 @@ unsigned long tapLengths[maxTapValues];
 int tapIndex = 0;
 int tapCount = 0;
 bool lastTapSkipped = false;
-unsigned short int minTempo = 1000; 
+unsigned short int minTempo = 1000;
 unsigned short int maxTempo = 214;
 
 void tapTempoStart() {
   unsigned long timer = millis();
   bool buttonDown = digitalRead(tempoButton) == LOW;
-  
+
   if (buttonDown && !lastButtonReading) { // Check if button has been pressed again
     calculateTaps(timer);
   }
@@ -312,47 +353,126 @@ void resetTaps(unsigned long timer) {
   }
 }
 
+uint8_t oldStepA = 0;
+uint8_t oldStepB = 0;
+uint8_t oldStepC = 0;
+uint8_t oldStepD = 0;
+
+void checkPotChanges() {
+  if(delayOled.ready()) {
+    delayOled.start();
+    if(abs(maxStepA - oldStepA) > 0  // If no changes to pots: display default screen
+      || abs(maxStepB - oldStepB) > 0
+      || abs(maxStepC - oldStepC) > 0
+      || abs(maxStepD - oldStepD) > 0) {
+      oldStepA = maxStepA;
+      oldStepB = maxStepB;
+      oldStepC = maxStepD;
+      oldStepD = maxStepD;
+      delayOled.start();
+    } else {
+      oledState = 0;
+    }
+  }
+}
+/*
+int potValue = 0
+float valueFiltered = 0;
+
+void lowPassFilter() {
+  potValue = mozziAnalogRead(volumePot);
+  const float alpha = 0.1;
+  valueFiltered = alpha * potValue + (1 — alpha) * valueFiltered;
+}
+*/
 void updateControl() {
   uint8_t tapRead = digitalRead(tempoButton);
   uint8_t oledRead = digitalRead(oledStateButton) == LOW;
+  uint8_t auxRead = digitalRead(auxStateButton) == LOW;
   if (oledRead && !lastOledState) {
     oledState = !(oledState);
+    oldMaxStepA = maxStepReadA;
+    oldMaxStepB = maxStepReadB;
+    oldMaxStepC = maxStepReadC;
+    oldMaxStepD = maxStepReadD;
+    oldStepA = maxStepA;
+    oldStepD = maxStepB;
+    oldStepC = maxStepC;
+    oldStepD = maxStepD;
   }
   lastOledState = oledRead;
+
+  if (auxRead && !lastAuxState) {
+    auxState = !(auxState);
+    oldVolA = volA;
+    oldVolB = volB;
+    oldVolC = volC;
+    oldVolD = volD;
+    oldPitchA = pitchA;
+    oldPitchB = pitchB;
+    oldPitchC = pitchC;
+    oldPitchD = pitchD;
+  }
+  lastAuxState = auxRead;
 
   /////////////////////////////
   // Potentiometer readings //
   ///////////////////////////
   tempoOrig = map(mozziAnalogRead(tempoPot), 0, 1023, 107, 500); // 500 - 107 milliseconds gives a range of 60 - 280 BPM at 1/4 notes
   float swing = utility.mapf(mozziAnalogRead(swingPot), 0, 1023, 1.00, 1.70); // 70 % upper range, same as in the Linn LM-1 drum machine
-  reverbSet = map(mozziAnalogRead(reverbPot), 0, 1023, 4, 0);
-  volume =  map(mozziAnalogRead(volumePot), 0, 1023, 0, 255);
+  reverbSet = map(mozziAnalogRead(reverbPot), 0, 1023, 6, 0);
+  volume = map(mozziAnalogRead(volumePot), 0, 1023, 0, 10);
 
-  unsigned int pitchReadA = mozziAnalogRead(pitchPotA);
-  unsigned int pitchReadB = mozziAnalogRead(pitchPotB);
-  unsigned int pitchReadC = mozziAnalogRead(pitchPotC);
-  unsigned int pitchReadD = mozziAnalogRead(pitchPotD); 
+  unsigned int auxPotReadA = mozziAnalogRead(auxPotA);
+  unsigned int auxPotReadB = mozziAnalogRead(auxPotB);
+  unsigned int auxPotReadC = mozziAnalogRead(auxPotC);
+  unsigned int auxPotReadD = mozziAnalogRead(auxPotD);
+
+  // CDhange whether pots control individual channel volumes or pitch
+  if (auxState == 0) {
+    volA = auxPotReadA >> 2; // Bitshift from 0 - 1023 range to 0 - 255
+    volB = auxPotReadB >> 2;
+    volC = auxPotReadC >> 2;
+    volD = auxPotReadD >> 2;
+    digitalWrite(ledVol, HIGH);
+    digitalWrite(ledPitch, LOW);
+  } else {
+    pitchA = auxPotReadA;
+    pitchB = auxPotReadB;
+    pitchC = auxPotReadC;
+    pitchD = auxPotReadD;
+    digitalWrite(ledPitch, HIGH);
+    digitalWrite(ledVol, LOW);
+  }
 
   unsigned int stepReadA = mozziAnalogRead(stepPotA);
   unsigned int stepReadB = mozziAnalogRead(stepPotB);
   unsigned int stepReadC = mozziAnalogRead(stepPotC);
   unsigned int stepReadD = mozziAnalogRead(stepPotD);
 
+  maxStepReadA = (uint8_t) map(stepReadA, 0, 1023, 1, MAX_STEPS);
+  maxStepReadB = (uint8_t) map(stepReadB, 0, 1023, 1, MAX_STEPS);
+  maxStepReadC = (uint8_t) map(stepReadC, 0, 1023, 1, MAX_STEPS);
+  maxStepReadD = (uint8_t) map(stepReadD, 0, 1023, 1, MAX_STEPS);
+
   uint8_t stepA;
   uint8_t stepB;
   uint8_t stepC;
   uint8_t stepD;
 
+  // Changes channel max steps from 1 - 16 or num of steps from 1 - to max steps
+  // Channels having different max steps enables you to create polyrhythms
   if (oledState == 0) {
     stepA = (uint8_t) map(stepReadA, 0, 1023, 1, maxStepA);
     stepB = (uint8_t) map(stepReadB, 0, 1023, 1, maxStepB);
     stepC = (uint8_t) map(stepReadC, 0, 1023, 1, maxStepD);
     stepD = (uint8_t) map(stepReadD, 0, 1023, 1, maxStepC);
-  } else {
-    maxStepA = (uint8_t) map(stepReadA, 0, 1023, 1, MAX_STEPS);
-    maxStepB = (uint8_t) map(stepReadB, 0, 1023, 1, MAX_STEPS);
-    maxStepC = (uint8_t) map(stepReadC, 0, 1023, 1, MAX_STEPS);
-    maxStepD = (uint8_t) map(stepReadD, 0, 1023, 1, MAX_STEPS);
+  } else { // Only updates value if potentiometer is moved, and not immediately after state button is pressed
+    if (maxStepReadA != oldMaxStepA) maxStepA = maxStepReadA;
+    if (maxStepReadB != oldMaxStepB) maxStepB = maxStepReadB;
+    if (maxStepReadC != oldMaxStepC) maxStepC = maxStepReadC;
+    if (maxStepReadD != oldMaxStepD) maxStepD = maxStepReadD;
+    checkPotChanges();
   }
 
   uint8_t beatA = (uint8_t) map(mozziAnalogRead(beatPotA), 0, 1023, 0, stepA);
@@ -378,17 +498,17 @@ void updateControl() {
     tapState = false;
   }
 
-  printTempo = newTempo >> 1; 
+  printTempo = newTempo >> 1;
 
   if (swingStep > MAX_STEPS) swingStep = 1;
-  
+
   if (swingStep % 2 == 0) {
     newTempo = newTempo / swing;
   } else {
     newTempo = newTempo * swing;
   }
 
-  // Set what sample gets played on given channel according to switch readings, set sample index for oled_screen.ino
+  // Set what sample gets played on given channel according to switch readings,set sample index for oled_screen.ino
   readSwitches(&soundA, &aHatBongo, &aBongo, &aKick, 41, 43, &sampleIdA);
   readSwitches(&soundB, &aConga, &aRim, &aSnare, 5, 6, &sampleIdB);
   readSwitches(&soundC, &aCymbal, &aPercHat, &aHiHat, 7, 8, &sampleIdC);
@@ -398,7 +518,7 @@ void updateControl() {
 
   readOnSwitch = digitalRead(onSwitch);
 
-   // If switch not at ON position stop playback
+   // If switch not at ON position stop playback, turn off LEDs
   if (readOnSwitch == HIGH) {
     digitalWrite(ledA, LOW);
     digitalWrite(ledB, LOW);
@@ -407,7 +527,7 @@ void updateControl() {
     return;
   }
 
-  const uint8_t arraySize = 6;
+  const uint8_t arraySize = 4;
   uint8_t pointers[arraySize] = { pointerA, pointerB, pointerC, pointerD };
   uint8_t steps[arraySize] = { stepA, stepB, stepC, stepD };
 
@@ -418,10 +538,10 @@ void updateControl() {
       }
     }
 
-    playSound(stepA, beatA, pointerA, soundA, pitchReadA, ledA);
-    playSound(stepB, beatB, pointerB, soundB, pitchReadB, ledB);
-    playSound(stepC, beatC, pointerC, soundC, pitchReadC, ledC);
-    playSound(stepD, beatD, pointerD, soundD, pitchReadD, ledD);
+    playSound(stepA, beatA, pointerA, soundA, pitchA, ledA);
+    playSound(stepB, beatB, pointerB, soundB, pitchB, ledB);
+    playSound(stepC, beatC, pointerC, soundC, pitchC, ledC);
+    playSound(stepD, beatD, pointerD, soundD, pitchD, ledD);
 
     pointerA++;
     pointerB++;
@@ -433,26 +553,28 @@ void updateControl() {
   }
 }
 
-AudioOutput_t updateAudio() {
-  int gain = (int)
-    ( (long)((*soundA).next() * volume) +
-            ((*soundB).next() * volume) +
-            ((*soundC).next() * volume) +
-            ((*soundD).next() * volume) ) >> 8; //8
+int updateAudio() {
+  // Don't really know how all this works but after lots of  testing it just does, without too much distortion to audio output
+  int gainA = (long)((*soundA).next() * volA) >> 2;
+  int gainB = (long)((*soundB).next() * volB) >> 2;
+  int gainC = (long)((*soundC).next() * volC) >> 2;
+  int gainD = (long)((*soundD).next() * volD) >> 2;
+
+  int gain = ((gainA + gainB + gainC + gainD) >> 5) * volume ; //8
 
   // Mozzi default output range is -244 to 243 in STANDARD mode or -8192 to 8191 in HIFI mode
   if (gain > 8191) {
     gain = 8191;
   } else if (gain < -8192) {
-    gain = -8192; 
+    gain = -8192;
   }
 
   int arev = reverb.next(gain);
 
-  if (reverbSet == 4) {
-    return MonoOutput::from8Bit(gain);
+  if (reverbSet == 6) {
+    return gain;
   } else {
-    return MonoOutput::from8Bit(gain + (arev >> reverbSet));
+    return gain + (arev >> reverbSet);
   }
 }
 
