@@ -7,7 +7,7 @@
 # then creates wavetable header files from them with a samplerate of 16384 or 32768.
 
 import glob
-import os, shutil
+import os, shutil, sys
 from array import array
 import wave
 from tkinter import *
@@ -40,7 +40,7 @@ channel_options = [
 
 def write_to_file(file):
     global run
-    with open(file, 'w') as f:            
+    with open(file, "w") as f:            
         while True:
             ffmpeg_filedialog = filedialog.askdirectory(title="Select Folder With ffmpeg.exe")
             if (os.path.isfile(f"{ffmpeg_filedialog}/ffmpeg.exe")):
@@ -54,14 +54,13 @@ def write_to_file(file):
 
 def locate_ffmpeg():
     global ffmpeg_exe
-    user = os.environ.get('USERNAME')
-    file = f'C:/Users/{user}/Documents/Python Scripts/ffmpeg_path.txt'
+    file = f"{os.path.dirname(sys.argv[0])}/ffmpeg_path.txt"
     if not os.path.exists(file):
         write_to_file(file)
     else:
         with open(file) as f:
             if (os.stat(file).st_size > 0):
-                ffmpeg_exe = f.readline().strip('\n')
+                ffmpeg_exe = f.readline().strip("\n")
             else:
                 write_to_file(file)
 
@@ -73,14 +72,14 @@ def check_ffmpeg(): #Check if ffmpeg.exe location is in System variables
         locate_ffmpeg()
 
 def raw_to_h(infile, tablename):
-    with open(infile, 'rb') as raw_file:
+    with open(infile, "rb") as raw_file:
         raw_data = raw_file.read()
 
-    audio_array = array('B', raw_data)
+    audio_array = array("B", raw_data)
     tablename = tablename.split("\\")[::-1][0].replace(" ", "_")
     output_file_name = os.path.splitext(infile)[0] + ".h"
     
-    with open(output_file_name, 'w') as output:
+    with open(output_file_name, "w") as output:
         output.write(f"#ifndef {tablename}_H_\n")
         output.write(f"#define {tablename}_H_\n\n")
         output.write("#if ARDUINO >= 100\n")
@@ -151,7 +150,7 @@ if __name__ == "__main__":
 
             root = Tk()
             root.geometry("300x200")
-            root.eval('tk::PlaceWindow . center')
+            root.eval("tk::PlaceWindow . center")
             root.title("Sample Options")
             root.resizable(0, 0)
             root.columnconfigure(0, weight=1)
