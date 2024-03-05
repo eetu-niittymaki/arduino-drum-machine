@@ -13,7 +13,8 @@ An Arduino nano is also used to control a small (0,96 inch) OLED screen.
 - Tempo control
 - Tap tempo
 - Highpass, bandpass and lowpass filters
-- OLED screen that displays BPM, what samples are seleceted on what channels and if playback is on
+- OLED screen that displays BPM, what samples are selected on what channels and if playback is on
+- A python script to convert .wav samples to .h files usable by Arduino
 
 ### TODO:
 
