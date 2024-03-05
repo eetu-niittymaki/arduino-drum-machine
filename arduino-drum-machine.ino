@@ -137,9 +137,10 @@ uint8_t volB;
 uint8_t volC;
 uint8_t volD;
 
-const IntMap tempoMap(0, 1023, 107, 500);
-const IntMap stepMap(0, 1023, 1, MAX_STEPS);
-const IntMap resonanceMap(0, 1023, 2, 212);
+// Avrg values
+unsigned short int sumTempo, sumA, sumB, sumC, sumD;
+
+uint8_t counterTempo, counterA, counterB, counterC, counterD;
 
 void setup() {
   pinMode(onSwitch, INPUT_PULLUP);
@@ -284,9 +285,10 @@ void resetTaps(unsigned long timer) {
     tapLengths[i] = 0;
   }
 }
-/*
-uint8_t oldStepA, oldStepB , oldStepC, oldStepD = 0;
 
+uint8_t oldStepA, oldStepB , oldStepC, oldStepD;
+
+// Check if any value has changed in 8000 milliseconds and start delay again if so. If not, change to default oled screen
 void checkPotChanges() {
   if(delayOled.ready()) {
     delayOled.start();
@@ -298,13 +300,11 @@ void checkPotChanges() {
       oldStepB = maxStepB;
       oldStepC = maxStepD;
       oldStepD = maxStepD;
-      delayOled.start();
     } else {
       oledState = 0;
     }
   }
 }
-*/
 
 void saveToEEPROM() {
   EEPROM.update(addressA, maxStepMappedA);
@@ -335,8 +335,10 @@ void setFilterValues(unsigned int resonance, uint8_t frequency) {
   }
 }
 
+
 void updateControl() {
   const uint8_t arraySize = 4;
+  readOnSwitch = digitalRead(onSwitch);
   uint8_t tapRead = digitalRead(tempoButton);
   uint8_t oledRead = digitalRead(oledStateButton) == LOW;
   uint8_t filterRead = digitalRead(filterStateButton) == LOW;
@@ -346,10 +348,10 @@ void updateControl() {
     oldMaxStepB = maxStepMappedB;
     oldMaxStepC = maxStepMappedC;
     oldMaxStepD = maxStepMappedD;
-    //oldStepA = maxStepA;
-    //oldStepD = maxStepB;
-    //oldStepC = maxStepC;
-    //oldStepD = maxStepD;
+    oldStepA = maxStepA;
+    oldStepD = maxStepB;
+    oldStepC = maxStepC;
+    oldStepD = maxStepD;
     if (oledState == 0) {
       //saveToEEPROM();
     }
@@ -366,33 +368,33 @@ void updateControl() {
   /////////////////////////////
   // Potentiometer readings //
   ///////////////////////////
-  tempoOriginal = tempoMap(mozziAnalogRead(tempoPot));                             // 500 - 107 milliseconds gives a range of 60 - 280 BPM at 1/4 notes
+  tempoOriginal = map(mozziAnalogRead(tempoPot), 0, 1023, 107, 500); // 500 - 107 milliseconds gives a range of 60 - 280 BPM at 1/4 notes
   float swing = utility.mapFloat(mozziAnalogRead(swingPot), 0, 1023, 1.00, 1.70);  // 70 % upper range, same as in the Linn LM-1 drum machine
-  unsigned int filterRes = resonanceMap(mozziAnalogRead(filterPotRes));
+  unsigned int filterRes = map(mozziAnalogRead(filterPotRes), 0, 1023, 2, 212);
   uint8_t filterFreq = mozziAnalogRead(filterPotFreq) >> 2;
 
-  unsigned int stepReadA = mozziAnalogRead(stepPotA);
-  unsigned int stepReadB = mozziAnalogRead(stepPotB);
-  unsigned int stepReadC = mozziAnalogRead(stepPotC);
-  unsigned int stepReadD = mozziAnalogRead(stepPotD);
-  maxStepMappedA = (uint8_t)stepMap(stepReadA);
-  maxStepMappedB = (uint8_t)stepMap(stepReadB);
-  maxStepMappedC = (uint8_t)stepMap(stepReadC);
-  maxStepMappedD = (uint8_t)stepMap(stepReadD);
+  unsigned int stepReadA = utility.getAverage(mozziAnalogRead(stepPotA), &sumA, &counterA);
+  unsigned int stepReadB = utility.getAverage(mozziAnalogRead(stepPotB), &sumB, &counterB);
+  unsigned int stepReadC = utility.getAverage(mozziAnalogRead(stepPotC), &sumC, &counterC);
+  unsigned int stepReadD = utility.getAverage(mozziAnalogRead(stepPotD), &sumD, &counterD);
+  maxStepMappedA = map(stepReadA, 15, 1023, 1, MAX_STEPS);
+  maxStepMappedB = map(stepReadB, 15, 1023, 1, MAX_STEPS);
+  maxStepMappedC = map(stepReadC, 15, 1023, 1, MAX_STEPS);
+  maxStepMappedD = map(stepReadD, 15, 1023, 1, MAX_STEPS);
 
   uint8_t beatA, beatB, beatC, beatD;
 
-  if (oledState == false) {  // Change how densly beats are scattered in relation to max steps
-    beatA = (uint8_t)map(stepReadA, 0, 1023, 0, maxStepA);
-    beatB = (uint8_t)map(stepReadB, 0, 1023, 0, maxStepB);
-    beatC = (uint8_t)map(stepReadC, 0, 1023, 0, maxStepC);
-    beatD = (uint8_t)map(stepReadD, 0, 1023, 0, maxStepD);
+  if (oledState == false) {  // Change how densely beats are scattered in relation to max steps
+    beatA = (uint8_t) map(stepReadA, 0, 1023, 0, maxStepA);
+    beatB = (uint8_t) map(stepReadB, 0, 1023, 0, maxStepB);
+    beatC = (uint8_t) map(stepReadC, 0, 1023, 0, maxStepC);
+    beatD = (uint8_t) map(stepReadD, 0, 1023, 0, maxStepD);
   } else {                                                         // Changes channel max steps from 1 - 16. Channels having different max steps enables you to create polyrhythms
     if (maxStepMappedA != oldMaxStepA) maxStepA = maxStepMappedA;  // Only updates value if potentiometer is moved, and not immediately
     if (maxStepMappedB != oldMaxStepB) maxStepB = maxStepMappedB;  // when state is changed
     if (maxStepMappedC != oldMaxStepC) maxStepC = maxStepMappedC;
     if (maxStepMappedD != oldMaxStepD) maxStepD = maxStepMappedD;
-    //checkPotChanges();
+    checkPotChanges();
   }
 
   volA = mozziAnalogRead(volPotA) >> 2;  // Shift from 0 - 1023 range to 0- 255
@@ -423,7 +425,7 @@ void updateControl() {
     tapState = false;
   }
 
-  printTempo = newTempo >> 1;
+  printTempo = utility.getAverage(newTempo >> 1, &sumTempo, &counterTempo);
 
   if (swingStep > MAX_STEPS) swingStep = 1;
 
@@ -433,9 +435,9 @@ void updateControl() {
     newTempo *= swing;
   }
 
-  if (digitalRead(38) == LOW) {
+  if (digitalRead(39) == LOW) {
     filterIndex = 2;
-  } else if (digitalRead(39) == LOW) {
+  } else if (digitalRead(38) == LOW) {
     filterIndex = 1;
   } else {
     filterIndex = 0;
@@ -450,8 +452,6 @@ void updateControl() {
   readSwitches(&soundD, &aTambourine, &aCowbell, &aClap, 40, 42, &sampleIdD);
 
   sendData();
-  /*
-  readOnSwitch = digitalRead(onSwitch);
 
   // If switch not at ON position stop playback, turn off LEDs
   if (readOnSwitch == HIGH) {
@@ -461,7 +461,7 @@ void updateControl() {
     digitalWrite(ledD, LOW);
     return;
   }
-  */
+
   uint8_t pointers[arraySize] = { pointerA, pointerB, pointerC, pointerD };
   uint8_t steps[arraySize] = { maxStepA, maxStepB, maxStepC, maxStepD };
 
@@ -493,7 +493,7 @@ int updateAudio() {
   int gainC = (long)(*soundC).next() * volC >> 2;
   int gainD = (long)(*soundD).next() * volD >> 2;
 
-  int gain = (gainA + gainB + gainC + gainD);  //8
+  int gain = (gainA + gainB + gainC + gainD);
 
   // Mozzi default output range is -244 to 243 in STANDARD mode or -8192 to 8191 in HIFI mode
   if (gain > 8191) {
@@ -518,18 +518,6 @@ int updateAudio() {
           return bpf.next(gain);
       }
   }
-  /*
-  if (filterState == 0) {
-    return gain;
-  } else {
-    if (filterIndex == 2) {  // Highpass, bandpass or lowpass filter
-      return hpf.next(gain);
-    } else if (filterIndex == 1) {
-      return lpf.next(gain);
-    } else {
-      return bpf.next(gain);
-    }
-  }*/
 }
 
 void setFrequencies() {
