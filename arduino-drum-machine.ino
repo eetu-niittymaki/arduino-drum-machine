@@ -8,7 +8,6 @@
 #include <StateVariable.h>
 #include <mozzi_rand.h>
 #include "Utilities.h"
-#include "Button.cpp"
 
 #include "samples/bongo.h"
 #include "samples/conga.h"
@@ -108,6 +107,7 @@ unsigned short int tempoOriginal;
 unsigned short int oldTempo;
 unsigned short int newTempo;
 unsigned short int printTempo;
+float sendTempo1, sendTempo2;
 
 const unsigned short int recorded_pitch = SAMPLERATE / NUM_CELLS;
 uint8_t swingStep = 1;
@@ -295,13 +295,6 @@ void resetTaps(unsigned long timer) {
   }
 }
 
-void saveToEEPROM() {
-  EEPROM.update(addressA, maxStepMappedA);
-  EEPROM.update(addressB, maxStepMappedB);
-  EEPROM.update(addressC, maxStepMappedC);
-  EEPROM.update(addressD, maxStepMappedD);
-}
-
 void setFilterValues(unsigned int resonance, uint8_t frequency) {
   if (rand(CONTROL_RATE / 2) == 0) {
     kFilterMod.setFreq(frequency / 64);
@@ -344,6 +337,12 @@ void updateControl() {
     oldMaxStepB = maxStepMappedB;
     oldMaxStepC = maxStepMappedC;
     oldMaxStepD = maxStepMappedD;
+    if (oledState == 0 && lastOledState == 1) {
+      //EEPROM.update(addressA, maxStepMappedA);
+      //EEPROM.update(addressB, maxStepMappedB);
+      //EEPROM.update(addressC, maxStepMappedC);
+      //EEPROM.update(addressD, maxStepMappedD);
+    }
   }
 
   lastOledState = oledRead;
@@ -354,7 +353,7 @@ void updateControl() {
   /////////////////////////////
   // Potentiometer readings //
   ///////////////////////////
-  tempoOriginal = map(mozziAnalogRead(tempoPot), 0, 1023, 118, 500); // 500 - 118 milliseconds gives a range of 60 - 255 BPM at 1/4 notes
+  tempoOriginal = map(mozziAnalogRead(tempoPot), 0, 1023, 107, 500); // 500 - 118 milliseconds gives a range of 60 - 255 BPM at 1/4 notes
   float swing = utility.mapFloat(mozziAnalogRead(swingPot), 0, 1023, 1.00, 1.70);  // 70 % upper range, same as in the Linn LM-1 drum machine
   unsigned int filterRes = map(mozziAnalogRead(filterPotRes), 0, 1023, 2, 212);
   uint8_t filterFreq = mozziAnalogRead(filterPotFreq) >> 2;
@@ -411,6 +410,8 @@ void updateControl() {
   }
 
   printTempo = utility.getAverage(newTempo >> 1, &sumTempo, &counterTempo);
+  sendTempo1 = printTempo / 2; // Sending data over Serial is limited to one byte, so to send a value higher than 255 (tempo is 60 - 280)
+  sendTempo2 = printTempo / 2; // I decided to split the value in two and then add them together on the receiver
 
   setSwing(swing);
   setFilterValues(filterFreq, filterRes);
@@ -429,7 +430,7 @@ void updateControl() {
   readSwitches(&soundC, &aCymbal, &aPercHat, &aHiHat, 7, 8, &sampleIdC);
   readSwitches(&soundD, &aTambourine, &aCowbell, &aClap, 40, 42, &sampleIdD);
 
-  sendData(oledState, readOnSwitch);
+  sendData(readOnSwitch);
 
   // If switch not at ON position stop playback, turn off LEDs
   if (readOnSwitch == HIGH) {
@@ -515,7 +516,7 @@ void setFrequencies() {
   kFilterMod.setFreq(1.3f);
 }
 
-void sendData(bool oledState, uint8_t readOnSwitch) {
+void sendData(uint8_t readOnSwitch) {
   if (delayTx.ready()) {
     if (oledState == 0) {
       Serial.print('[');
@@ -525,7 +526,10 @@ void sendData(bool oledState, uint8_t readOnSwitch) {
       Serial.print(readOnSwitch);
       Serial.print(",");
       delayTx.start();
-      Serial.print(printTempo);
+      Serial.print(sendTempo1);
+      Serial.print(",");
+      delayTx.start();
+      Serial.print(sendTempo2);
       Serial.print(",");
       delayTx.start();
       Serial.print(sampleIdA);

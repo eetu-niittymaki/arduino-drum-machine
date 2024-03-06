@@ -13,7 +13,9 @@ char receivedChars[numChars];
 char tempChars[numChars];
 
 uint8_t buttonState;
-uint8_t tempo;
+uint8_t tempo1;
+uint8_t tempo2;
+unsigned short int tempo;
 uint8_t idA;
 uint8_t idB;
 uint8_t idC;
@@ -85,7 +87,10 @@ void parseData() {
     buttonState = atoi(strtokIindex);
 
     strtokIindex = strtok(NULL, ",");
-    tempo = atoi(strtokIindex);
+    tempo1 = atoi(strtokIindex);
+
+    strtokIindex = strtok(NULL, ",");
+    tempo2 = atoi(strtokIindex);
 
     strtokIindex = strtok(NULL, ",");
     idA = atoi(strtokIindex);
@@ -114,15 +119,6 @@ void parseData() {
     strtokIindex = strtok(NULL, ",");
     stepsD = atoi(strtokIindex);
   }
-}
-
-void showParsedData() {
-   Serial.println(buttonState);
-   Serial.println(tempo);
-   Serial.println(idA);
-   Serial.println(idB);
-   Serial.println(idC);
-   Serial.println(idD);
 }
 
 void recvWithStartEndMarkers() {
@@ -236,7 +232,7 @@ void drawSetSteps() {
   oled.println(" ");
   oled.display();
 
-  oled.setCursor(8, 25);
+  oled.setCursor(10, 25);
   oled.print("MAX STEPS");
   oled.display();
 }
@@ -264,6 +260,9 @@ void loop() {
     //showParsedData();
     newData = false;
   }
+
+  tempo = tempo1 + tempo2;
+
   if (oledState == 0) {
     drawPlayScreen();
   } else {
