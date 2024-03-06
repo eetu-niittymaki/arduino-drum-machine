@@ -16,13 +16,13 @@ float Utilities::mapFloat(float x, float in_min, float in_max, float out_min, fl
 
 // Potentiometer readings fluctuate, so count average of 5 values for better accuracy
 unsigned short int Utilities::getAverage(unsigned short int value, unsigned short int *sum, uint8_t *counter) {
-  const uint8_t averageMax = 5;
+  const uint8_t max = 5;
   unsigned short int tempValue = 0;
   *sum += value;
   *counter += 1;
 
-  if (*counter > averageMax) {
-    tempValue = *sum / averageMax;
+  if (*counter >= max) {
+    tempValue = *sum / max;
     *counter = 0;
     *sum = 0;
     return tempValue;

@@ -8,6 +8,7 @@
 #include <StateVariable.h>
 #include <mozzi_rand.h>
 #include "Utilities.h"
+#include "Button.cpp"
 
 #include "samples/bongo.h"
 #include "samples/conga.h"
@@ -97,7 +98,6 @@ EventDelay delayTx;        // So serial receiver device doesn't get flooded with
 EventDelay delayOled;
 Utilities utility;
 
-uint8_t readOnSwitch;
 bool tapState = false;
 bool oledState = false;
 bool lastOledState = false;
@@ -172,7 +172,7 @@ void setup() {
   setFrequencies();
 
   playbackDelay.set(10);
-  delayTx.set(350);
+  delayTx.set(400);
   delayOled.set(8000);
 }
 
@@ -200,6 +200,15 @@ void readSwitches(Sample<NUM_CELLS, AUDIO_RATE> **sound,
   } else {
     *sound = sample3;
     *sampleId = 0;
+  }
+}
+
+void setSwing(float swing) {
+  if (swingStep > MAX_STEPS) swingStep = 1;
+  if (swingStep % 2 == 0) {
+    newTempo /= swing;
+  } else {
+    newTempo *= swing;
   }
 }
 
@@ -286,26 +295,6 @@ void resetTaps(unsigned long timer) {
   }
 }
 
-uint8_t oldStepA, oldStepB , oldStepC, oldStepD;
-
-// Check if any value has changed in 8000 milliseconds and start delay again if so. If not, change to default oled screen
-void checkPotChanges() {
-  if(delayOled.ready()) {
-    delayOled.start();
-    if(abs(maxStepA - oldStepA) > 0  // If no changes to pots after 8 seconds: display default screen
-      || abs(maxStepB - oldStepB) > 0
-      || abs(maxStepC - oldStepC) > 0
-      || abs(maxStepD - oldStepD) > 0) {
-      oldStepA = maxStepA;
-      oldStepB = maxStepB;
-      oldStepC = maxStepD;
-      oldStepD = maxStepD;
-    } else {
-      oledState = 0;
-    }
-  }
-}
-
 void saveToEEPROM() {
   EEPROM.update(addressA, maxStepMappedA);
   EEPROM.update(addressB, maxStepMappedB);
@@ -335,32 +324,29 @@ void setFilterValues(unsigned int resonance, uint8_t frequency) {
   }
 }
 
+uint8_t checkButtonPressed(uint8_t read, uint8_t state, uint8_t lastState) {
+  if (read && !(lastState)) {
+    return !(state);
+  }
+}
 
 void updateControl() {
   const uint8_t arraySize = 4;
-  readOnSwitch = digitalRead(onSwitch);
+  uint8_t readOnSwitch = digitalRead(onSwitch);
   uint8_t tapRead = digitalRead(tempoButton);
   uint8_t oledRead = digitalRead(oledStateButton) == LOW;
   uint8_t filterRead = digitalRead(filterStateButton) == LOW;
-  if (oledRead && !lastOledState) {
-    oledState = !(oledState);
+
+  filterState = checkButtonPressed(filterRead, filterState, lastFilterState);
+  oledState = checkButtonPressed(oledRead, oledState, lastOledState);
+  if (oledRead == false) {
     oldMaxStepA = maxStepMappedA;
     oldMaxStepB = maxStepMappedB;
     oldMaxStepC = maxStepMappedC;
     oldMaxStepD = maxStepMappedD;
-    oldStepA = maxStepA;
-    oldStepD = maxStepB;
-    oldStepC = maxStepC;
-    oldStepD = maxStepD;
-    if (oledState == 0) {
-      //saveToEEPROM();
-    }
   }
-  lastOledState = oledRead;
 
-  if (filterRead && !lastFilterState) {
-    filterState = !(filterState);
-  }
+  lastOledState = oledRead;
   lastFilterState = filterRead;
 
   (filterState == false) ? digitalWrite(ledFilter, LOW) : digitalWrite(ledFilter, HIGH);
@@ -368,7 +354,7 @@ void updateControl() {
   /////////////////////////////
   // Potentiometer readings //
   ///////////////////////////
-  tempoOriginal = map(mozziAnalogRead(tempoPot), 0, 1023, 107, 500); // 500 - 107 milliseconds gives a range of 60 - 280 BPM at 1/4 notes
+  tempoOriginal = map(mozziAnalogRead(tempoPot), 0, 1023, 118, 500); // 500 - 118 milliseconds gives a range of 60 - 255 BPM at 1/4 notes
   float swing = utility.mapFloat(mozziAnalogRead(swingPot), 0, 1023, 1.00, 1.70);  // 70 % upper range, same as in the Linn LM-1 drum machine
   unsigned int filterRes = map(mozziAnalogRead(filterPotRes), 0, 1023, 2, 212);
   uint8_t filterFreq = mozziAnalogRead(filterPotFreq) >> 2;
@@ -377,10 +363,10 @@ void updateControl() {
   unsigned int stepReadB = utility.getAverage(mozziAnalogRead(stepPotB), &sumB, &counterB);
   unsigned int stepReadC = utility.getAverage(mozziAnalogRead(stepPotC), &sumC, &counterC);
   unsigned int stepReadD = utility.getAverage(mozziAnalogRead(stepPotD), &sumD, &counterD);
-  maxStepMappedA = map(stepReadA, 15, 1023, 1, MAX_STEPS);
-  maxStepMappedB = map(stepReadB, 15, 1023, 1, MAX_STEPS);
-  maxStepMappedC = map(stepReadC, 15, 1023, 1, MAX_STEPS);
-  maxStepMappedD = map(stepReadD, 15, 1023, 1, MAX_STEPS);
+  maxStepMappedA = map(stepReadA, 0, 1023, 1, MAX_STEPS);
+  maxStepMappedB = map(stepReadB, 0, 1023, 1, MAX_STEPS);
+  maxStepMappedC = map(stepReadC, 0, 1023, 1, MAX_STEPS);
+  maxStepMappedD = map(stepReadD, 0, 1023, 1, MAX_STEPS);
 
   uint8_t beatA, beatB, beatC, beatD;
 
@@ -394,10 +380,9 @@ void updateControl() {
     if (maxStepMappedB != oldMaxStepB) maxStepB = maxStepMappedB;  // when state is changed
     if (maxStepMappedC != oldMaxStepC) maxStepC = maxStepMappedC;
     if (maxStepMappedD != oldMaxStepD) maxStepD = maxStepMappedD;
-    checkPotChanges();
   }
 
-  volA = mozziAnalogRead(volPotA) >> 2;  // Shift from 0 - 1023 range to 0- 255
+  volA = mozziAnalogRead(volPotA) >> 2;  // Shift from 0 - 1023 range to 0 - 255
   volB = mozziAnalogRead(volPotB) >> 2;
   volC = mozziAnalogRead(volPotC) >> 2;
   volD = mozziAnalogRead(volPotD) >> 2;
@@ -427,13 +412,8 @@ void updateControl() {
 
   printTempo = utility.getAverage(newTempo >> 1, &sumTempo, &counterTempo);
 
-  if (swingStep > MAX_STEPS) swingStep = 1;
-
-  if (swingStep % 2 == 0) {
-    newTempo /= swing;
-  } else {
-    newTempo *= swing;
-  }
+  setSwing(swing);
+  setFilterValues(filterFreq, filterRes);
 
   if (digitalRead(39) == LOW) {
     filterIndex = 2;
@@ -443,15 +423,13 @@ void updateControl() {
     filterIndex = 0;
   }
 
-  setFilterValues(filterFreq, filterRes);
-
   // Set what sample gets played on given channel according to switch readings,set sample index for oled_screen.ino
   readSwitches(&soundA, &aHatBongo, &aBongo, &aKick, 41, 43, &sampleIdA);
   readSwitches(&soundB, &aConga, &aRim, &aSnare, 5, 6, &sampleIdB);
   readSwitches(&soundC, &aCymbal, &aPercHat, &aHiHat, 7, 8, &sampleIdC);
   readSwitches(&soundD, &aTambourine, &aCowbell, &aClap, 40, 42, &sampleIdD);
 
-  sendData();
+  sendData(oledState, readOnSwitch);
 
   // If switch not at ON position stop playback, turn off LEDs
   if (readOnSwitch == HIGH) {
@@ -505,15 +483,12 @@ int updateAudio() {
   switch (filterState) {
     case false:
       return gain;
-      break;
     case true:
       switch (filterIndex) { // Highpass, bandpass or lowpass filter
         case 2:
           return hpf.next(gain);
-          break;
         case 1:
           return lpf.next(gain);
-          break;
         default:
           return bpf.next(gain);
       }
@@ -540,7 +515,7 @@ void setFrequencies() {
   kFilterMod.setFreq(1.3f);
 }
 
-void sendData() {
+void sendData(bool oledState, uint8_t readOnSwitch) {
   if (delayTx.ready()) {
     if (oledState == 0) {
       Serial.print('[');
