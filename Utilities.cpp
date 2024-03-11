@@ -14,19 +14,19 @@ float Utilities::mapFloat(float x, float in_min, float in_max, float out_min, fl
     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-// Potentiometer readings fluctuate, so count average of 5 values for better accuracy
-unsigned short int Utilities::getAverage(unsigned short int value, unsigned short int *sum, uint8_t *counter) {
-  const uint8_t max = 5;
-  unsigned short int tempValue = 0;
-  *sum += value;
+// Potentiometer readings fluctuate, so count average for better accuracy
+unsigned short int Utilities::getAverage(unsigned short int value, unsigned short int *sum,
+                                        uint8_t *counter, unsigned short int *array, uint8_t *max) {
+  *sum -= array[*counter];
+  array[*counter] = value;
+  *sum += array[*counter];
   *counter += 1;
 
-  if (*counter >= max) {
-    tempValue = *sum / max;
+  if (*counter >= *max) {
     *counter = 0;
-    *sum = 0;
-    return tempValue;
   }
+
+  return *sum / *max;
 }
 
 bool Utilities::startPlayback(uint8_t stepCount, uint8_t beatCount, uint8_t pointer) {

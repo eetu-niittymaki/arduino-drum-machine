@@ -137,10 +137,11 @@ uint8_t volB;
 uint8_t volC;
 uint8_t volD;
 
-// Avrg values
+// Averaging values
+const uint8_t AVERAGE_MAX = 15;
 unsigned short int sumTempo, sumA, sumB, sumC, sumD;
-
 uint8_t counterTempo, counterA, counterB, counterC, counterD;
+unsigned short int arrayTempo[AVERAGE_MAX], arrayA[AVERAGE_MAX], arrayB[AVERAGE_MAX], arrayC[AVERAGE_MAX], arrayD[AVERAGE_MAX];
 
 void setup() {
   pinMode(onSwitch, INPUT_PULLUP);
@@ -348,7 +349,7 @@ void updateControl() {
   lastOledState = oledRead;
   lastFilterState = filterRead;
 
-  (filterState == false) ? digitalWrite(ledFilter, LOW) : digitalWrite(ledFilter, HIGH);
+  (filterState == true) ? digitalWrite(ledFilter, LOW) : digitalWrite(ledFilter, HIGH);
 
   /////////////////////////////
   // Potentiometer readings //
@@ -358,10 +359,10 @@ void updateControl() {
   unsigned int filterRes = map(mozziAnalogRead(filterPotRes), 0, 1023, 2, 212);
   uint8_t filterFreq = mozziAnalogRead(filterPotFreq) >> 2;
 
-  unsigned int stepReadA = utility.getAverage(mozziAnalogRead(stepPotA), &sumA, &counterA);
-  unsigned int stepReadB = utility.getAverage(mozziAnalogRead(stepPotB), &sumB, &counterB);
-  unsigned int stepReadC = utility.getAverage(mozziAnalogRead(stepPotC), &sumC, &counterC);
-  unsigned int stepReadD = utility.getAverage(mozziAnalogRead(stepPotD), &sumD, &counterD);
+  unsigned int stepReadA = utility.getAverage(mozziAnalogRead(stepPotA), &sumA, &counterA, arrayA, &AVERAGE_MAX);
+  unsigned int stepReadB = utility.getAverage(mozziAnalogRead(stepPotB), &sumB, &counterB, arrayB, &AVERAGE_MAX);
+  unsigned int stepReadC = utility.getAverage(mozziAnalogRead(stepPotC), &sumC, &counterC, arrayC, &AVERAGE_MAX);
+  unsigned int stepReadD = utility.getAverage(mozziAnalogRead(stepPotD), &sumD, &counterD, arrayD, &AVERAGE_MAX);
   maxStepMappedA = map(stepReadA, 0, 1023, 1, MAX_STEPS);
   maxStepMappedB = map(stepReadB, 0, 1023, 1, MAX_STEPS);
   maxStepMappedC = map(stepReadC, 0, 1023, 1, MAX_STEPS);
@@ -409,9 +410,9 @@ void updateControl() {
     tapState = false;
   }
 
-  printTempo = utility.getAverage(newTempo >> 1, &sumTempo, &counterTempo);
-  sendTempo1 = printTempo / 2; // Sending data over Serial is limited to one byte, so to send a value higher than 255 (tempo is 60 - 280)
-  sendTempo2 = printTempo / 2; // I decided to split the value in two and then add them together on the receiver
+  printTempo = utility.getAverage(newTempo >> 1, &sumTempo, &counterTempo, arrayTempo, &AVERAGE_MAX);
+  sendTempo1 = (float)printTempo / 2; // Sending data over Serial is limited to one byte, so to send a value higher than 255 (tempo is 60 - 280)
+  sendTempo2 = (float)printTempo / 2; // I decided to split the value in two and then add them together on the receiver
 
   setSwing(swing);
   setFilterValues(filterFreq, filterRes);

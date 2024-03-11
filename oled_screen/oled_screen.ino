@@ -13,8 +13,8 @@ char receivedChars[numChars];
 char tempChars[numChars];
 
 uint8_t buttonState;
-uint8_t tempo1;
-uint8_t tempo2;
+float tempo1;
+float tempo2;
 unsigned short int tempo;
 uint8_t idA;
 uint8_t idB;
@@ -87,10 +87,10 @@ void parseData() {
     buttonState = atoi(strtokIindex);
 
     strtokIindex = strtok(NULL, ",");
-    tempo1 = atoi(strtokIindex);
+    tempo1 = atof(strtokIindex);
 
     strtokIindex = strtok(NULL, ",");
-    tempo2 = atoi(strtokIindex);
+    tempo2 = atof(strtokIindex);
 
     strtokIindex = strtok(NULL, ",");
     idA = atoi(strtokIindex);
@@ -261,7 +261,7 @@ void loop() {
     newData = false;
   }
 
-  tempo = tempo1 + tempo2;
+  tempo = (int)(tempo1 + tempo2);
 
   if (oledState == 0) {
     drawPlayScreen();
