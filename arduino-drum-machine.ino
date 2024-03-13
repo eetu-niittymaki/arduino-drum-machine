@@ -318,10 +318,12 @@ void setFilterValues(unsigned int resonance, uint8_t frequency) {
   }
 }
 
-uint8_t checkButtonPressed(uint8_t read, uint8_t state, uint8_t lastState) {
-  if (read && !(lastState)) {
-    return !(state);
+void changeButtonState(uint8_t read, bool *state, bool *lastState) {
+  if (read && !(*lastState)) {
+    *state = !(*state);
   }
+
+  *lastState = read;
 }
 
 void updateControl() {
@@ -331,8 +333,9 @@ void updateControl() {
   uint8_t oledRead = digitalRead(oledStateButton) == LOW;
   uint8_t filterRead = digitalRead(filterStateButton) == LOW;
 
-  filterState = checkButtonPressed(filterRead, filterState, lastFilterState);
-  oledState = checkButtonPressed(oledRead, oledState, lastOledState);
+  changeButtonState(filterRead, &filterState, &lastFilterState);
+  changeButtonState(oledRead, &oledState, &lastOledState);
+
   if (oledRead == false) {
     oldMaxStepA = maxStepMappedA;
     oldMaxStepB = maxStepMappedB;
@@ -346,10 +349,7 @@ void updateControl() {
     }
   }
 
-  lastOledState = oledRead;
-  lastFilterState = filterRead;
-
-  (filterState == true) ? digitalWrite(ledFilter, LOW) : digitalWrite(ledFilter, HIGH);
+  (filterState == false) ? digitalWrite(ledFilter, LOW) : digitalWrite(ledFilter, HIGH);
 
   /////////////////////////////
   // Potentiometer readings //
