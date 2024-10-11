@@ -6,6 +6,7 @@ An Arduino nano is also used to control a small (0,96 inch) OLED screen.
 ## Features:
 
 - Four channels with three different samples on each to choose from
+- LEDs for each channel that blink when sample is triggered
 - Max step control on channel (1 - 16) and how densely beats are played in relation to max steps
 - Individual channel pitch control
 - Individual channel and master volume control
