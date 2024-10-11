@@ -3,7 +3,6 @@
 #include <Sample.h>
 #include <EventDelay.h>
 #include <Oscil.h>
-#include <IntMap.h>
 #include <tables/cos2048_int8.h>
 #include <StateVariable.h>
 #include <mozzi_rand.h>
@@ -132,10 +131,7 @@ uint8_t oldMaxStepA, oldMaxStepB, oldMaxStepC, oldMaxStepD;
 
 uint8_t sampleIdA, sampleIdB, sampleIdC, sampleIdD;
 
-uint8_t volA;
-uint8_t volB;
-uint8_t volC;
-uint8_t volD;
+uint8_t volA, volB, volC, volD;
 
 // Averaging values
 const uint8_t AVERAGE_MAX = 15;
@@ -322,7 +318,6 @@ void changeButtonState(uint8_t read, bool *state, bool *lastState) {
   if (read && !(*lastState)) {
     *state = !(*state);
   }
-
   *lastState = read;
 }
 

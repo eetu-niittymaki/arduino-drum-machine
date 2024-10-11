@@ -29,10 +29,24 @@ unsigned short int Utilities::getAverage(unsigned short int value, unsigned shor
   return *sum / *max;
 }
 
+// stepCount = number of steps in sequence, beatCount = number of beats, pointer = position in sequence
 bool Utilities::startPlayback(uint8_t stepCount, uint8_t beatCount, uint8_t pointer) {
-  float divider = ((float)beatCount / (float)stepCount);
-  uint8_t count = pointer * divider;
-  uint8_t prevCount = (pointer - 1) * divider;
+  // Check for potential division by zero
+  if (stepCount == 0 || beatCount == 0) {
+      return false; // No steps or beats to process, no playback
+  }
 
-  return { (pointer == 0) ? start = (beatCount != 0) : start = (count > prevCount) };
+  // Calculate the divider once
+  float divider = static_cast<float>(beatCount) / static_cast<float>(stepCount);
+
+  // Calculate the current count and previous count
+  uint8_t count = pointer * divider;       // Calculate count for the current pointer
+  uint8_t prevCount = count - divider;     // Derive previous count from current
+
+  // Determine playback based on pointer
+  if (pointer == 0) {
+      return beatCount != 0;  // Playback if there are any beats
+  } else {
+      return count > prevCount; // Continue playback if the current step leads to a new beat
+  }
 }
