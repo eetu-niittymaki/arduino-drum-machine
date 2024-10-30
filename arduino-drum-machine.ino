@@ -1,5 +1,5 @@
 #include <EEPROM.h>
-#include <MozziGuts.h>
+#include <Mozzi.h>
 #include <Sample.h>
 #include <EventDelay.h>
 #include <Oscil.h>
@@ -22,7 +22,7 @@
 #include "samples/tambourine.h"
 
 #define NUM_CELLS 4096    // Make sure this is the same as in .h wavetable files
-#define SAMPLERATE 32768  //16384
+#define SAMPLERATE 16384  //16384
 #define CONTROL_RATE 256
 
 #define MAX_STEPS 16
@@ -34,7 +34,7 @@
 #define swingPot 11
 
 #define pitchPotA 1
-#define pitchPotB 2
+#define pitchPotB 2fg
 #define pitchPotC 3
 #define pitchPotD 4
 
@@ -349,10 +349,10 @@ void updateControl() {
   /////////////////////////////
   // Potentiometer readings //
   ///////////////////////////
-  tempoOriginal = map(mozziAnalogRead(tempoPot), 0, 1023, 107, 500); // 500 - 118 milliseconds gives a range of 60 - 255 BPM at 1/4 notes
+  tempoOriginal = map(mozziAnalogRead(tempoPot), 0, 1023, 107, 500); // 500 - 118 milliseconds * 2 gives a range of 60 - 280 BPM at 1/4 notes
   float swing = utility.mapFloat(mozziAnalogRead(swingPot), 0, 1023, 1.00, 1.70);  // 70 % upper range, same as in the Linn LM-1 drum machine
   unsigned int filterRes = map(mozziAnalogRead(filterPotRes), 0, 1023, 2, 212);
-  uint8_t filterFreq = mozziAnalogRead(filterPotFreq) >> 2;
+  uint8_t filterFreq = mozziAnalogRead(filterPotFreq) >> 2; // Bitshift right 0-1023 readings to 0-255 range
 
   unsigned int stepReadA = utility.getAverage(mozziAnalogRead(stepPotA), &sumA, &counterA, arrayA, &AVERAGE_MAX);
   unsigned int stepReadB = utility.getAverage(mozziAnalogRead(stepPotB), &sumB, &counterB, arrayB, &AVERAGE_MAX);
@@ -371,8 +371,8 @@ void updateControl() {
     beatC = (uint8_t) map(stepReadC, 0, 1023, 0, maxStepC);
     beatD = (uint8_t) map(stepReadD, 0, 1023, 0, maxStepD);
   } else {                                                         // Changes channel max steps from 1 - 16. Channels having different max steps enables you to create polyrhythms
-    if (maxStepMappedA != oldMaxStepA) maxStepA = maxStepMappedA;  // Only updates value if potentiometer is moved, and not immediately
-    if (maxStepMappedB != oldMaxStepB) maxStepB = maxStepMappedB;  // when state is changed
+    if (maxStepMappedA != oldMaxStepA) maxStepA = maxStepMappedA;  // Only updates value if potentiometer is moved, and not immediately when state is changed
+    if (maxStepMappedB != oldMaxStepB) maxStepB = maxStepMappedB;
     if (maxStepMappedC != oldMaxStepC) maxStepC = maxStepMappedC;
     if (maxStepMappedD != oldMaxStepD) maxStepD = maxStepMappedD;
   }
@@ -462,7 +462,7 @@ void updateControl() {
   }
 }
 
-int updateAudio() {
+AudioOutput updateAudio() {
   int gainA = (long)(*soundA).next() * volA >> 2;
   int gainB = (long)(*soundB).next() * volB >> 2;
   int gainC = (long)(*soundC).next() * volC >> 2;
@@ -470,6 +470,7 @@ int updateAudio() {
 
   int gain = (gainA + gainB + gainC + gainD);
 
+  // Check if audio output is in acceptable range
   // Mozzi default output range is -244 to 243 in STANDARD mode or -8192 to 8191 in HIFI mode
   if (gain > 8191) {
     gain = 8191;
@@ -477,17 +478,16 @@ int updateAudio() {
     gain = -8192;
   }
 
-  switch (filterState) {
-    case false:
-      return gain;
-    case true:
-      switch (filterIndex) { // Highpass, bandpass or lowpass filter
+  if (!filterState) { // Check if filter is activated
+    return MonoOutput::from8Bit(gain);    // Return unfiltered sound if not
+  } else {
+      switch (filterIndex) { // Return sound with high-, band- or lowpass filter
         case 2:
-          return hpf.next(gain);
+          return MonoOutput::from8Bit(hpf.next(gain));
         case 1:
-          return lpf.next(gain);
+          return MonoOutput::from8Bit(lpf.next(gain));
         default:
-          return bpf.next(gain);
+          return MonoOutput::from8Bit(bpf.next(gain));
       }
   }
 }

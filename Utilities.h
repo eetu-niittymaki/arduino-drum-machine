@@ -2,6 +2,7 @@
 #define Utilities_h
 
 #include "Arduino.h"
+#include <MozziHeadersOnly.h>
 
 class Utilities {
     public:
